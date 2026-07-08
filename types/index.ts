@@ -19,8 +19,8 @@ export interface Season {
   id: number;
   anime_id: number;
   season_number: number;
-  anilist_id: number | null;
-  mal_id: number | null;
+  anilist_ids: number[] | null; // Updated to arrays supporting multi-cours
+  mal_ids: number[] | null;     // Updated to arrays supporting multi-cours
   title: string | null;
   title_english: string | null;
   title_romaji: string | null;

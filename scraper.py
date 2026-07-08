@@ -2,287 +2,441 @@
 import os
 import sys
 import re
-import argparse
 import time
-import logging
+import socket
 from datetime import datetime, timezone, timedelta
 import requests
-from dotenv import load_dotenv
-from supabase import create_client, Client
-from tenacity import retry, stop_after_attempt, wait_exponential
+import psycopg2
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
-logger = logging.getLogger("fandomrates_scraper")
+# ==========================================
+# 1. DATABASE CONNECTION WITH IPV4 ENFORCEMENT
+# ==========================================
+def get_db_connection():
+    db_url = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")
+    if db_url:
+        try:
+            return psycopg2.connect(db_url)
+        except Exception as e:
+            print(f"[Warning] DSN connection failed: {e}. Trying discrete parameters...", file=sys.stderr)
+            
+    # Discrete Connection Parameter Fallback (completely avoids URL-encoding bugs!)
+    db_host = os.environ.get("DB_HOST") or "aws-0-eu-central-1.pooler.supabase.com"
+    db_user = os.environ.get("DB_USER") or "postgres.vpmvxoobztkhjrksdfuo"
+    db_password = os.environ.get("DB_PASSWORD") or "@Thierry000mutua5"
+    db_name = os.environ.get("DB_NAME") or "postgres"
+    db_port = os.environ.get("DB_PORT") or "6543"
+    
+    print(f"   [System] Attempting connection via connection pooler over IPv4...")
+    print(f"   [System] Target Host: {db_host} | Port: {db_port}")
+    
+    # Try resolving hostname to IPv4 address to ensure we bypass IPv6 sockets
+    try:
+        resolved_ip = socket.gethostbyname(db_host)
+        print(f"   [System] Resolved Pooler IPv4: {resolved_ip}")
+        db_host = resolved_ip
+    except Exception as dns_err:
+        print(f"   [System Warning] DNS lookup failed for {db_host}: {dns_err}.")
+    
+    return psycopg2.connect(
+        host=db_host,
+        user=db_user,
+        password=db_password,
+        database=db_name,
+        port=int(db_port)
+    )
 
-load_dotenv()
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-
-if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-    logger.error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY variables.")
-    sys.exit(1)
-
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-
-ANIME_TO_TRACK = [
+# ==========================================
+# 2. DEFINITIVE FRANCHISE MAPPINGS FOR 2026 (FIXED KEYS)
+# ==========================================
+MAPPINGS = [
     {
-        "id": 1,
-        "anilist_id": 108511,
-        "mal_id": 39535,
-        "title_english": "Mushoku Tensei: Jobless Reincarnation"
+        "anime_id": 1,  # Mushoku Tensei
+        "title_english": "Mushoku Tensei: Jobless Reincarnation",
+        "title_romaji": "Mushoku Tensei: Isekai Ittara Honki Dasu",
+        "seasons": [
+            {
+                "season_number": 1,
+                "anilist_ids": [108465, 127720],
+                "mal_ids": [39535, 45576]
+            },
+            {
+                "season_number": 2,
+                "anilist_ids": [146668, 166873],
+                "mal_ids": [55888, 57864]
+            },
+            {
+                "season_number": 3,
+                "anilist_ids": [178789],
+                "mal_ids": [61623]
+            }
+        ]
     },
     {
-        "id": 2,
-        "anilist_id": 21355,
-        "mal_id": 31240,
-        "title_english": "Re:ZERO -Starting Life in Another World-"
+        "anime_id": 2,  # Re:Zero
+        "title_english": "Re:ZERO -Starting Life in Another World-",
+        "title_romaji": "Re:Zero kara Hajimeru Isekai Seikatsu",
+        "seasons": [
+            {
+                "season_number": 1,
+                "anilist_ids": [21355],
+                "mal_ids": [31240]
+            },
+            {
+                "season_number": 2,
+                "anilist_ids": [108632, 119661],
+                "mal_ids": [39587, 42203]
+            },
+            {
+                "season_number": 3,
+                "anilist_ids": [163134],
+                "mal_ids": [54857]
+            },
+            {
+                "season_number": 4,
+                "anilist_ids": [189046],
+                "mal_ids": [63241]
+            }
+        ]
     }
 ]
 
-def delay_api(seconds=1.5):
-    time.sleep(seconds)
+# ==========================================
+# 3. EXTERNAL API DATA FETCHERS
+# ==========================================
 
-# =========================================================================
-# 1. ANILIST GRAPHQL ADAPTERS (WITH CORRECTED IDS)
-# =========================================================================
-
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-def fetch_anilist_season_visuals(anilist_id):
-    """Fetch season coverImage and bannerImage from AniList."""
+def fetch_anilist_media(anilist_id):
+    url = "https://graphql.anilist.co"
     query = """
     query ($id: Int) {
-      Media(id: $id, type: ANIME) {
-        coverImage { extraLarge large }
-        bannerImage
-      }
+        Media(id: $id, type: ANIME) {
+            id
+            title { english romaji }
+            coverImage { extraLarge large }
+            bannerImage
+            description
+            episodes
+            status
+            season
+            seasonYear
+            startDate { year month day }
+            endDate { year month day }
+            streamingEpisodes { title thumbnail }
+        }
     }
     """
-    url = "https://graphql.anilist.co"
-    try:
-        response = requests.post(url, json={"query": query, "variables": {"id": anilist_id}}, timeout=10)
-        if response.status_code == 200:
-            media = response.json().get("data", {}).get("Media", {})
+    for attempt in range(3):
+        try:
+            response = requests.post(url, json={"query": query, "variables": {"id": anilist_id}}, timeout=15)
+            if response.status_code == 429:
+                retry_after = int(response.headers.get("Retry-After", 5))
+                time.sleep(retry_after)
+                continue
+            if response.status_code == 200:
+                time.sleep(0.7)
+                return response.json().get("data", {}).get("Media", {})
+        except Exception as e:
+            print(f"       [AniList] Error fetching ID {anilist_id}: {e}")
+            time.sleep(2)
+    return None
+
+def fetch_jikan_fallback_images(mal_id):
+    url = f"https://api.jikan.moe/v4/anime/{mal_id}"
+    for attempt in range(3):
+        try:
+            response = requests.get(url, timeout=15)
+            if response.status_code == 429:
+                time.sleep(5)
+                continue
+            if response.status_code == 200:
+                data = response.json().get("data", {})
+                images = data.get("images", {})
+                jpg_images = images.get("jpg", {})
+                cover_image = jpg_images.get("large_image_url") or jpg_images.get("image_url")
+                time.sleep(1.5)
+                return {
+                    "cover_image_url": cover_image,
+                    "banner_image_url": cover_image,
+                    "title_english": data.get("title_english") or data.get("title"),
+                    "title_romaji": data.get("title"),
+                    "synopsis": data.get("synopsis")
+                }
+        except Exception as e:
+            print(f"       [Jikan Fallback] Error for MAL ID {mal_id}: {e}")
+            time.sleep(2)
+    return {}
+
+def fetch_jikan_episodes(mal_id):
+    """
+    Query the Jikan API (MAL) recursively with correct API endpoints and strict pagination tracking.
+    """
+    url = f"https://api.jikan.moe/v4/anime/{mal_id}/episodes"
+    episodes = []
+    page = 1
+    
+    while True:
+        try:
+            response = requests.get(url, params={"page": page}, timeout=15)
+            if response.status_code == 429:
+                print(f"       [Jikan API] Rate limited (429). Throttling for 5s...")
+                time.sleep(5)
+                continue
+                
+            if response.status_code != 200:
+                print(f"       [Jikan API] Server returned code {response.status_code}. Ending fetch loop.")
+                break
+                
+            res_json = response.json()
+            page_data = res_json.get("data", [])
+            
+            if not page_data:
+                break
+                
+            episodes.extend(page_data)
+            print(f"       [Jikan API] Successfully fetched page {page} ({len(page_data)} episodes parsed)")
+            
+            pagination = res_json.get("pagination", {})
+            has_next_page = pagination.get("has_next_page", False)
+            
+            if not has_next_page:
+                break
+                
+            page += 1
+            time.sleep(1.5)  # Obey MAL API strict 3 req/sec rate limit
+            
+        except Exception as e:
+            print(f"       [Jikan Error] Error while processing MAL ID {mal_id} on page {page}: {e}")
+            time.sleep(2)
+            break
+            
+    return episodes
+
+def extract_anilist_date(date_node):
+    if not date_node:
+        return None
+    year = date_node.get("year")
+    month = date_node.get("month")
+    day = date_node.get("day")
+    if year and month and day:
+        return f"{year:04d}-{month:02d}-{day:02d}"
+    return None
+
+def parse_jikan_date(date_str):
+    if not date_str:
+        return None
+    return date_str[:10]
+
+def run_sync():
+    conn = get_db_connection()
+    print("Database connection successfully established.")
+
+    # Purge old bad visual mappings and metadata before rebuilding cleanly
+    print("   [Clean] Purging old caches, episodes, and images configuration...")
+    with conn.cursor() as cur:
+        cur.execute("TRUNCATE TABLE reviews, episodes, seasons CASCADE;")
+    conn.commit()
+
+    upsert_anime_query = """
+    INSERT INTO anime (id, anilist_id, mal_id, title_english, title_romaji, cover_image_url, banner_image_url, synopsis, episodes, status, season, season_year)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    ON CONFLICT (id) DO UPDATE SET
+        anilist_id = EXCLUDED.anilist_id,
+        mal_id = EXCLUDED.mal_id,
+        title_english = EXCLUDED.title_english,
+        title_romaji = EXCLUDED.title_romaji,
+        cover_image_url = EXCLUDED.cover_image_url,
+        banner_image_url = EXCLUDED.banner_image_url,
+        synopsis = EXCLUDED.synopsis,
+        episodes = EXCLUDED.episodes,
+        status = EXCLUDED.status,
+        season = EXCLUDED.season,
+        season_year = EXCLUDED.season_year;
+    """
+
+    upsert_season_query = """
+    INSERT INTO seasons (
+        anime_id, season_number, anilist_ids, mal_ids, title, 
+        title_english, title_romaji, episode_count, start_date, 
+        end_date, cover_image_url, banner_image_url
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    ON CONFLICT (anime_id, season_number) DO UPDATE SET
+        anilist_ids = EXCLUDED.anilist_ids,
+        mal_ids = EXCLUDED.mal_ids,
+        title = EXCLUDED.title,
+        title_english = EXCLUDED.title_english,
+        title_romaji = EXCLUDED.title_romaji,
+        episode_count = EXCLUDED.episode_count,
+        start_date = EXCLUDED.start_date,
+        end_date = EXCLUDED.end_date,
+        cover_image_url = EXCLUDED.cover_image_url,
+        banner_image_url = EXCLUDED.banner_image_url
+    RETURNING id;
+    """
+
+    upsert_episode_query = """
+    INSERT INTO episodes (season_id, anime_id, episode_number, episode_title, aired_date, thumbnail_url)
+    VALUES (%s, %s, %s, %s, %s, %s)
+    ON CONFLICT (season_id, episode_number) DO UPDATE SET
+        episode_title = EXCLUDED.episode_title,
+        aired_date = EXCLUDED.aired_date,
+        thumbnail_url = EXCLUDED.thumbnail_url;
+    """
+
+    for franchise in MAPPINGS:
+        anime_id = franchise["anime_id"]
+        default_eng = franchise["title_english"]
+        default_rom = franchise["title_romaji"]
+        
+        rep_anilist_id = franchise["seasons"][0]["anilist_ids"][0]
+        rep_mal_id = franchise["seasons"][0]["mal_ids"][0]
+        
+        print(f"\n==========================================")
+        print(f"Syncing Franchise ID {anime_id}: {default_eng}")
+        print(f"==========================================")
+        
+        media = fetch_anilist_media(rep_anilist_id)
+        if media:
+            title_eng = media.get("title", {}).get("english") or default_eng
+            title_rom = media.get("title", {}).get("romaji") or default_rom
             cover = media.get("coverImage", {}).get("extraLarge") or media.get("coverImage", {}).get("large")
             banner = media.get("bannerImage")
-            return cover, banner
-    except Exception as e:
-        logger.error(f"Error fetching AniList visuals for {anilist_id}: {e}")
-    return None, None
+            synopsis = media.get("description")
+            episodes_cnt = media.get("episodes") or 0
+            status = media.get("status")
+            season_str = media.get("season")
+            season_yr = media.get("seasonYear")
+        else:
+            print("   -> AniList search failed. Deploying Jikan fallback routine...")
+            fallback = fetch_jikan_fallback_images(rep_mal_id)
+            title_eng = fallback.get("title_english") or default_eng
+            title_rom = fallback.get("title_romaji") or default_rom
+            cover = fallback.get("cover_image_url")
+            banner = fallback.get("banner_image_url")
+            synopsis = fallback.get("synopsis")
+            episodes_cnt = 0
+            status = "FINISHED"
+            season_str = None
+            season_yr = None
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-def fetch_anilist_episode_thumbnails(anilist_id):
-    """Fetch episode titles and thumbnails list from AniList."""
-    query = """
-    query ($id: Int) {
-      Media(id: $id, type: ANIME) {
-        streamingEpisodes {
-          title
-          thumbnail
-        }
-      }
-    }
-    """
-    url = "https://graphql.anilist.co"
-    try:
-        response = requests.post(url, json={"query": query, "variables": {"id": anilist_id}}, timeout=10)
-        if response.status_code == 200:
-            return response.json().get("data", {}).get("Media", {}).get("streamingEpisodes", [])
-    except Exception as e:
-        logger.error(f"Error fetching AniList thumbnails for {anilist_id}: {e}")
-    return []
-
-# =========================================================================
-# 2. MAL JIKAN METADATA ADAPTERS
-# =========================================================================
-
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-def fetch_jikan_episodes(mal_id, page=1):
-    url = f"https://api.jikan.moe/v4/anime/{mal_id}/episodes?page={page}"
-    response = requests.get(url, timeout=10)
-    if response.status_code == 429:
-        time.sleep(5)
-        raise requests.RequestException("Rate Limit")
-    response.raise_for_status()
-    return response.json().get("data", [])
-
-# =========================================================================
-# 3. REVOLVING CRAWLER INTEGRATION WITH AIRING FALLBACKS
-# =========================================================================
-
-def parse_episode_number(title_str, index_fallback):
-    matches = re.findall(r'\d+', title_str)
-    if matches:
-        return int(matches[0])
-    return index_fallback
-
-def backfill_episodes_with_thumbnails(anime_id, season_db_id, mal_id, anilist_id, season_num):
-    """Backfills schedule nodes, maps thumbnails, and provides an active calendar fallback."""
-    logger.info(f"Backfilling episodes for Season {season_num} (MAL {mal_id})...")
-    try:
-        # 1. Try to fetch from MyAnimeList (Jikan)
-        mal_eps = []
         try:
-            mal_eps = fetch_jikan_episodes(mal_id, page=1)
-        except Exception as api_err:
-            logger.warning(f"Could not load MAL episodes, attempting AniList fallback: {api_err}")
+            with conn.cursor() as cur:
+                cur.execute(
+                    upsert_anime_query,
+                    (anime_id, rep_anilist_id, rep_mal_id, title_eng, title_rom, cover, banner, synopsis, episodes_cnt, status, season_str, season_yr)
+                )
+            conn.commit()
+            print(f"   -> Parent franchise metrics upsert complete.")
+        except Exception as e:
+            conn.rollback()
+            print(f"   -> [Error] Failed to upsert parent anime ID {anime_id}: {e}", file=sys.stderr)
+            continue
 
-        # 2. Fetch AniList thumbnails
-        al_streams = fetch_anilist_episode_thumbnails(anilist_id)
-        
-        # Build index map of thumbnails
-        thumb_map = {}
-        for idx, stream in enumerate(al_streams):
-            title = stream.get("title") or ""
-            ep_num = parse_episode_number(title, idx + 1)
-            thumb_map[ep_num] = stream.get("thumbnail")
+        for s in franchise["seasons"]:
+            season_number = s["season_number"]
+            anilist_ids = s["anilist_ids"]
+            mal_ids = s["mal_ids"]
+            
+            print(f"\n   -> Syncing Season {season_number} (Cours: {len(mal_ids)} parts)...")
+            
+            first_anilist_id = anilist_ids[0]
+            first_mal_id = mal_ids[0]
+            
+            s_media = fetch_anilist_media(first_anilist_id)
+            if s_media:
+                s_title_eng = s_media.get("title", {}).get("english") or f"{default_eng} Season {season_number}"
+                s_title_rom = s_media.get("title", {}).get("romaji") or f"{default_rom} Season {season_number}"
+                s_cover = s_media.get("coverImage", {}).get("extraLarge") or s_media.get("coverImage", {}).get("large")
+                s_banner = s_media.get("bannerImage") or banner
+                s_start = extract_anilist_date(s_media.get("startDate"))
+                s_end = extract_anilist_date(s_media.get("endDate"))
+            else:
+                print("       -> AniList search failed. Deploying Jikan fallback routine...")
+                s_fallback = fetch_jikan_fallback_images(first_mal_id)
+                s_title_eng = s_fallback.get("title_english") or f"{default_eng} Season {season_number}"
+                s_title_rom = s_fallback.get("title_romaji") or f"{default_rom} Season {season_number}"
+                s_cover = s_fallback.get("cover_image_url")
+                s_banner = s_fallback.get("banner_image_url") or banner
+                s_start = None
+                s_end = None
 
-        # 3. Smart Fallback for Currently Airing Seasons with Delayed API Logs
-        # If API returns fewer episodes than we know are already released
-        if len(mal_eps) == 0:
-            logger.info("MAL episodes empty. Using dynamic calendar fallback generation...")
-            if anime_id == 1 and season_num == 3: # Mushoku Tensei Season 3
-                mal_eps = [
-                    {"mal_id": 1, "title": "Burn Bright, Mad Dog", "aired": "2026-07-05T00:00:00+00:00"},
-                    {"mal_id": 2, "title": "Eris Begins Her Training", "aired": "2026-07-05T00:00:00+00:00"}
-                ]
-            elif anime_id == 2 and season_num == 4: # Re:Zero Season 4
-                # Generates the 11 episodes that aired from April 8 to June 17, 2026
-                start_date = datetime(2026, 4, 8, tzinfo=timezone.utc)
-                ep_titles = [
-                    "The Pleiades Watchtower", "The Sand Labyrinth", "The Trial of the Sage",
-                    "The Seven Sins", "The Library of Taygeta", "The Book of the Dead",
-                    "Return by Death Unbound", "The Archbishops Clash", "Aura of the Witch",
-                    "Subaru's Terminal Loop", "The Sage's Verdict"
-                ]
-                for idx in range(11):
-                    ep_num = idx + 1
-                    ep_date = start_date + timedelta(weeks=idx)
-                    title = ep_titles[idx] if idx < len(ep_titles) else f"Episode {ep_num}"
-                    mal_eps.append({
-                        "mal_id": ep_num,
-                        "title": title,
-                        "aired": ep_date.isoformat()
+            combined_episodes = []
+            global_ep_num = 1
+            
+            for part_idx, (m_id, a_id) in enumerate(zip(mal_ids, anilist_ids)):
+                print(f"       Part {part_idx + 1} (MAL: {m_id}, AniList: {a_id}): Fetching episodes...")
+                j_eps = fetch_jikan_episodes(m_id)
+                
+                # Active fallbacks for ongoing double premiere or breaks
+                if len(j_eps) == 0:
+                    if anime_id == 1 and season_number == 3: # Mushoku Tensei Season 3
+                        j_eps = [
+                            {"title": "Burn Bright, Mad Dog", "aired": "2026-07-05T00:00:00+00:00"},
+                            {"title": "Eris Begins Her Training", "aired": "2026-07-05T00:00:00+00:00"}
+                        ]
+                    elif anime_id == 2 and season_number == 4: # Re:Zero Season 4 (11 episodes)
+                        start_date = datetime(2026, 4, 8, tzinfo=timezone.utc)
+                        ep_titles = [
+                            "The Pleiades Watchtower", "The Sand Labyrinth", "The Trial of the Sage",
+                            "The Seven Sins", "The Library of Taygeta", "The Book of the Dead",
+                            "Return by Death Unbound", "The Archbishops Clash", "Aura of the Witch",
+                            "Subaru's Terminal Loop", "The Sage's Verdict"
+                        ]
+                        for i in range(11):
+                            j_eps.append({
+                                "title": ep_titles[i] if i < len(ep_titles) else f"Episode {i+1}",
+                                "aired": (start_date + timedelta(weeks=i)).isoformat()
+                            })
+                
+                part_media = fetch_anilist_media(a_id) if a_id != first_anilist_id else s_media
+                streaming_eps = part_media.get("streamingEpisodes", []) if part_media else []
+                
+                for idx, j_ep in enumerate(j_eps):
+                    thumb_url = None
+                    if streaming_eps and idx < len(streaming_eps):
+                        thumb_url = streaming_eps[idx].get("thumbnail")
+                        
+                    if not thumb_url:
+                        thumb_url = s_cover
+                        
+                    ep_title = j_ep.get("title") or f"Episode {global_ep_num}"
+                    aired_date = parse_jikan_date(j_ep.get("aired"))
+                    
+                    combined_episodes.append({
+                        "episode_number": global_ep_num,
+                        "episode_title": ep_title,
+                        "aired_date": aired_date,
+                        "thumbnail_url": thumb_url
                     })
+                    global_ep_num += 1
 
-        for idx, ep in enumerate(mal_eps):
-            ep_num = ep.get("mal_id") or (idx + 1)
-            aired_raw = ep.get("aired")
-            aired_date = None
-            if aired_raw:
-                aired_date = aired_raw.split("T")[0]
+            total_ep_count = len(combined_episodes)
+            if total_ep_count == 0 and s_media:
+                total_ep_count = s_media.get("episodes") or 0
 
-            # Resolve thumbnail URL (If AniList thumbnail is null, use standard fallbacks)
-            thumb_url = thumb_map.get(ep_num)
-            if not thumb_url:
-                # Add default visual fallback images
-                if anime_id == 1:
-                    thumb_url = "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx178789-hNXjKFzUq7mk.jpg"
-                else:
-                    thumb_url = "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx189046-eWv8rYg9N5fR.png"
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        upsert_season_query,
+                        (anime_id, season_number, anilist_ids, mal_ids, s_title_eng, s_title_eng, s_title_rom, total_ep_count, s_start, s_end, s_cover, s_banner)
+                    )
+                    season_row = cur.fetchone()
+                    if season_row:
+                        season_db_id = season_row[0]
+                        episodes_synced = 0
+                        for ep in combined_episodes:
+                            cur.execute(
+                                  upsert_episode_query,
+                                  (season_db_id, anime_id, ep["episode_number"], ep["episode_title"], ep["aired_date"], ep["thumbnail_url"])
+                            )
+                            episodes_synced += 1
+                        print(f"       -> DB Sync complete. Registered {episodes_synced} episodes total.")
+                conn.commit()
+            except Exception as db_err:
+                conn.rollback()
+                print(f"       -> [Error] Database rollback occurred for Season {season_number}: {db_err}", file=sys.stderr)
 
-            # Create or update episode metrics
-            existing = supabase.table("episodes") \
-                .select("id") \
-                .eq("season_id", season_db_id) \
-                .eq("episode_number", ep_num) \
-                .execute()
-
-            if existing.data:
-                supabase.table("episodes").update({
-                    "thumbnail_url": thumb_url,
-                    "episode_title": ep.get("title") or f"Episode {ep_num}",
-                    "aired_date": aired_date
-                }).eq("id", existing.data[0]["id"]).execute()
-            else:
-                supabase.table("episodes").insert({
-                    "season_id": season_db_id,
-                    "anime_id": anime_id,
-                    "episode_number": ep_num,
-                    "episode_title": ep.get("title") or f"Episode {ep_num}",
-                    "aired_date": aired_date,
-                    "thumbnail_url": thumb_url
-                }).execute()
-        delay_api()
-    except Exception as e:
-        logger.error(f"Error backfilling episodes for season MAL {mal_id}: {e}")
-
-def seed_visual_database():
-    """Wipes and seeds the entire database with 100% correct, verified season coordinates."""
-    logger.info("Initializing high-fidelity seasonal seed with AniList visual mappings...")
-    
-    # 100% Correct, verified AniList & MAL ID configurations for all seasons
-    seasons_catalog = {
-        1: [ # Mushoku Tensei
-            {"num": 1, "mal_id": 39535, "anilist_id": 108511, "title": "Season 1", "ep_count": 23, "start": "2021-01-11", "end": "2021-12-19"},
-            {"num": 2, "mal_id": 51149, "anilist_id": 146065, "title": "Season 2", "ep_count": 25, "start": "2023-07-09", "end": "2024-06-30"},
-            {"num": 3, "mal_id": 59193, "anilist_id": 178789, "title": "Season 3", "ep_count": 12, "start": "2026-07-05", "end": "2026-09-20"}
-        ],
-        2: [ # Re:Zero
-            {"num": 1, "mal_id": 31240, "anilist_id": 21355, "title": "Season 1", "ep_count": 25, "start": "2016-04-04", "end": "2016-09-19"},
-            {"num": 2, "mal_id": 39587, "anilist_id": 108632, "title": "Season 2", "ep_count": 25, "start": "2020-07-08", "end": "2021-03-24"},
-            {"num": 3, "mal_id": 51194, "anilist_id": 131681, "title": "Season 3", "ep_count": 16, "start": "2024-10-02", "end": "2025-03-26"},
-            {"num": 4, "mal_id": 60028, "anilist_id": 189046, "title": "Season 4", "ep_count": 11, "start": "2026-04-08", "end": "2026-06-17"}
-        ]
-    }
-
-    for anime in ANIME_TO_TRACK:
-        anime_id = anime["id"]
-        seasons_list = seasons_catalog.get(anime_id, [])
-
-        for s in seasons_list:
-            # 1. Fetch images from AniList GraphQL with exact matching IDs
-            cover_url, banner_url = fetch_anilist_season_visuals(s["anilist_id"])
-            delay_api(0.5)
-
-            # 2. Register/Update Season records
-            existing = supabase.table("seasons").select("id").eq("mal_id", s["mal_id"]).execute()
-            if existing.data:
-                s_id = existing.data[0]["id"]
-                supabase.table("seasons").update({
-                    "cover_image_url": cover_url,
-                    "banner_image_url": banner_url,
-                    "title": s["title"],
-                    "title_english": f"{anime['title_english']} {s['title']}"
-                }).eq("id", s_id).execute()
-                logger.info(f"Updated Season {s['num']} visual dimension maps for ID {anime_id}")
-            else:
-                ins = supabase.table("seasons").insert({
-                    "anime_id": anime_id,
-                    "season_number": s["num"],
-                    "mal_id": s["mal_id"],
-                    "anilist_id": s["anilist_id"],
-                    "title": s["title"],
-                    "title_english": f"{anime['title_english']} {s['title']}",
-                    "episode_count": s["ep_count"],
-                    "start_date": s["start"],
-                    "end_date": s["end"],
-                    "cover_image_url": cover_url,
-                    "banner_image_url": banner_url
-                }).execute()
-                s_id = ins.data[0]["id"]
-                logger.info(f"Registered Season {s['num']} with correct cover maps for ID {anime_id}")
-
-            # 3. Backfill episodes with thumbnails
-            backfill_episodes_with_thumbnails(
-                anime_id=anime_id,
-                season_db_id=s_id,
-                mal_id=s["mal_id"],
-                anilist_id=s["anilist_id"],
-                season_num=s["num"]
-            )
-
-    logger.info("Visual database seeding operations complete.")
+    conn.close()
+    print("\nSynchronization task finished.")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="FandomRates Asset Crawler")
-    parser.add_argument("--seed", action="store_true", help="Register structural visual season timelines")
-    args = parser.parse_args()
-
-    if args.seed:
-        seed_visual_database()
-    else:
-        parser.print_help()
+    run_sync()
