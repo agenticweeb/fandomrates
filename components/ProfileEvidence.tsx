@@ -16,7 +16,6 @@ export default function ProfileEvidence({ profiles, animeMap }: ProfileEvidenceP
   const [currentPage, setCurrentPage] = useState<number>(1);
   const rowsPerPage = 20;
 
-  // Filter profiles based on search query and category filters
   const filteredProfiles = useMemo(() => {
     return profiles.filter((p) => {
       const matchSearch = (p.display_id || p.username || '').toLowerCase().includes(search.toLowerCase());
@@ -25,7 +24,6 @@ export default function ProfileEvidence({ profiles, animeMap }: ProfileEvidenceP
     });
   }, [profiles, search, categoryFilter]);
 
-  // Handle pagination indexing
   const paginatedProfiles = useMemo(() => {
     const startIndex = (currentPage - 1) * rowsPerPage;
     return filteredProfiles.slice(startIndex, startIndex + rowsPerPage);
@@ -33,11 +31,12 @@ export default function ProfileEvidence({ profiles, animeMap }: ProfileEvidenceP
 
   const totalPages = Math.ceil(filteredProfiles.length / rowsPerPage);
 
+  // Irreverent, fan-native definitions
   const categoryLabels: { [key: string]: { label: string; style: string } } = {
-    rival_fandom: { label: 'Rival Fandom Sabotage', style: 'bg-danger/10 text-danger border-danger/30' },
-    burner: { label: 'Burner Account', style: 'bg-accent-gold/10 text-accent-gold border-accent-gold/30 shadow-[0_0_10px_rgba(245,158,11,0.05)]' },
+    rival_fandom: { label: 'Rival Fan Hit', style: 'bg-danger/10 text-danger border-danger/30' },
+    burner: { label: 'Fresh Account', style: 'bg-accent-gold/10 text-accent-gold border-accent-gold/30' },
     inflation: { label: 'Rating Inflation', style: 'bg-accent-mushoku/10 text-accent-mushoku border-accent-mushoku/30' },
-    unknown: { label: 'Suspicious Score Spread', style: 'bg-surface-elevated text-text-secondary border-border' },
+    unknown: { label: 'The Extremist', style: 'bg-surface-elevated text-text-secondary border-border' },
   };
 
   return (
@@ -60,10 +59,10 @@ export default function ProfileEvidence({ profiles, animeMap }: ProfileEvidenceP
             className="rounded-lg border border-border bg-surface px-4 py-2 text-xs font-extrabold text-text-primary focus:outline-none"
           >
             <option value="all">Show All Profiles</option>
-            <option value="rival_fandom">Rival Fandom Sabotage</option>
-            <option value="burner">Burners Only</option>
+            <option value="rival_fandom">Rival Fan Hit</option>
+            <option value="burner">Fresh Accounts</option>
             <option value="inflation">Score Inflation</option>
-            <option value="unknown">Suspicious Spread</option>
+            <option value="unknown">The Extremist</option>
           </select>
         </div>
       </div>
@@ -74,12 +73,12 @@ export default function ProfileEvidence({ profiles, animeMap }: ProfileEvidenceP
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-surface-elevated/50 text-[10px] font-black uppercase tracking-widest text-text-secondary border-b border-border">
-                <th className="p-4">Anonymized Identifier</th>
-                <th className="p-4">Target Show</th>
-                <th className="p-4">Platform</th>
-                <th className="p-4">Rating Given</th>
-                <th className="p-4">Classification</th>
-                <th className="p-4 text-right">Inspection</th>
+                <th className="p-4">User ID</th>
+                <th className="p-4">Show</th>
+                <th className="p-4">Site</th>
+                <th className="p-4">Score</th>
+                <th className="p-4">Flag</th>
+                <th className="p-4 text-right">Evidence</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60 text-sm">
@@ -122,7 +121,7 @@ export default function ProfileEvidence({ profiles, animeMap }: ProfileEvidenceP
                             onClick={() => setExpandedId(isExpanded ? null : profile.id)}
                             className="text-xs font-bold text-accent-cyan hover:underline hover:text-accent-cyan/80"
                           >
-                            {isExpanded ? 'Hide Payload' : 'Audit Data'}
+                            {isExpanded ? 'Hide' : 'Inspect'}
                           </button>
                         </td>
                       </tr>

@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ==========================================
-# 1. DATABASE CONNECTION (ZERO HARDCODED SECRETS)
+# 1. DATABASE CONNECTION
 # ==========================================
 def get_db_connection():
     db_url = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")
@@ -31,10 +31,9 @@ def get_db_connection():
     db_port = os.environ.get("DB_PORT") or "5432"
     
     if not db_password:
-        print("[Error] DB_PASSWORD is missing. Check your local hidden .env configuration.", file=sys.stderr)
+        print("[Error] DB_PASSWORD is missing in local hidden .env configuration.", file=sys.stderr)
         sys.exit(1)
     
-    # Force IPv4 socket resolution
     try:
         resolved_ip = socket.gethostbyname(db_host)
         db_host = resolved_ip
@@ -196,6 +195,9 @@ def fetch_jikan_episodes(mal_id):
             break
     return episodes
 
+# ==========================================
+# 4. DATE AND UTILITY PARSERS
+# ==========================================
 def extract_anilist_date(date_node):
     if not date_node:
         return None
@@ -212,10 +214,9 @@ def parse_jikan_date(date_str):
     return date_str[:10]
 
 # ==========================================
-# 4. CORE REBUILDS & SCHEMA AUTO-HEALTH
+# 5. CORE REBUILDS & SCHEMA AUTO-HEALTH
 # ==========================================
 def ensure_database_schema_health(conn):
-    """Automatically ensures database schemas are healthy and have episode rating columns [14]."""
     print("   [Self-Healing] Auditing columns definitions on episodes relation...")
     try:
         with conn.cursor() as cur:
@@ -233,7 +234,6 @@ def run_sync():
     conn = get_db_connection()
     print("Database connection successfully established.")
 
-    # Apply database self-healing checks on startup
     ensure_database_schema_health(conn)
 
     print("   [Clean] Purging old caches, episodes, and images configuration...")
@@ -410,7 +410,6 @@ def run_sync():
                     ep_title = j_ep.get("title") or f"Episode {global_ep_num}"
                     aired_date = parse_jikan_date(j_ep.get("aired"))
                     
-                    # Extract standard MAL episodic score (discussion polls) and normalize to standard 10-point scale [4.2]
                     raw_score = j_ep.get("score")
                     rating_score = float(raw_score) * 2.0 if raw_score else None
                     
@@ -444,7 +443,7 @@ def run_sync():
                                   (season_db_id, anime_id, ep["episode_number"], ep["episode_title"], ep["aired_date"], ep["thumbnail_url"], ep["rating"], ep["vote_count"])
                             )
                             episodes_synced += 1
-                        print(f"       -> DB Sync complete. Registered {episodes_synced} episodes total.")
+                        print(f"       -> Sync complete. Registered {episodes_synced} episodes total.")
                 conn.commit()
             except Exception as db_err:
                 conn.rollback()

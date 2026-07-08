@@ -23,6 +23,10 @@ export default function EpisodeCard({
     ? new Date(episode.aired_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     : 'N/A';
 
+  const scoreString = episode.rating 
+    ? `${Number(episode.rating).toFixed(2)}` 
+    : 'N/A';
+
   return (
     <motion.div 
       onClick={onClick}
@@ -35,13 +39,13 @@ export default function EpisodeCard({
       }`}
     >
       {anomalyDetected && (
-        <span className="absolute top-3 right-3 bg-danger/25 text-danger text-[9px] font-black uppercase px-2.5 py-1 rounded-full z-10 backdrop-blur-md border border-danger/30 animate-pulse">
-          Anomaly Week
+        <span className="absolute top-3 right-3 bg-danger/20 text-danger text-[9px] font-extrabold uppercase px-2 py-0.5 border border-danger/30 rounded-full z-10 backdrop-blur-sm animate-pulse">
+          🔥 Hot Week — Score moved
         </span>
       )}
 
-      {/* Official Streaming Thumbnail Container with Fallback Gradient */}
-      <div className="relative aspect-video w-full bg-[#0a0a0f] overflow-hidden border-b border-border/80">
+      {/* Streaming Thumbnail Container */}
+      <div className="relative aspect-video w-full bg-background overflow-hidden border-b border-border/80">
         {episode.thumbnail_url ? (
           <img
             src={episode.thumbnail_url}
@@ -57,31 +61,28 @@ export default function EpisodeCard({
         <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent opacity-70"></div>
       </div>
       
-      {/* Narrative Metric Content */}
+      {/* Narrative Card Details */}
       <div className="p-4 flex-grow flex flex-col justify-between">
         <div className="space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black text-accent-gold uppercase tracking-widest">
-              EP {episode.episode_number}
-            </span>
-          </div>
-          
+          <span className="text-[10px] font-black text-accent-gold uppercase tracking-widest">
+            EP {episode.episode_number}
+          </span>
           <h4 className="text-sm font-extrabold text-text-primary line-clamp-2 leading-tight group-hover:text-accent-cyan transition-colors">
             {episode.episode_title || `Episode ${episode.episode_number}`}
           </h4>
         </div>
 
-        {/* Clear Disclaimer Metric Display */}
+        {/* Display native varying community ratings */}
         <div className="space-y-2 border-t border-border/40 pt-2">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-[10px] text-text-secondary font-medium">Week of Airing:</span>
+            <span className="text-[10px] text-text-secondary font-semibold">Week of Air:</span>
             <span className="font-mono font-black text-accent-cyan">
-              {overallScore ? `★ ${overallScore.toFixed(2)}` : 'N/A'}
+              {scoreString}
             </span>
           </div>
           <div className="flex items-center justify-between text-[10px] text-text-secondary font-mono">
-            <span>Aired: {airDate}</span>
-            <span>{reviewCount} reviews</span>
+            <span>{airDate}</span>
+            <span>{reviewCount} reviews that week</span>
           </div>
         </div>
       </div>

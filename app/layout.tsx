@@ -34,7 +34,7 @@ export default function RootLayout({
           {children}
         </main>
         <footer className="border-t border-border py-8 bg-surface/50 mt-12 text-center text-xs text-text-secondary">
-          <p>© {new Date().getFullYear()} FandomRates. Engineered for high-integrity anime evaluation.</p>
+          <p>© {new Date().getFullYear()} FandomRates. Built by fans who got tired of wondering.</p>
         </footer>
       </body>
     </html>

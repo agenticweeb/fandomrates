@@ -6,7 +6,6 @@ import { supabase } from '@/lib/supabase';
 export default function MethodologyPage() {
   const [loading, setLoading] = useState<string | null>(null);
 
-  // Compiles database datasets to local downloads instantly
   const handleExport = async (table: string, format: 'csv' | 'json') => {
     setLoading(`${table}-${format}`);
     try {
@@ -22,7 +21,6 @@ export default function MethodologyPage() {
         mimeType = 'application/json';
         fileExtension = 'json';
       } else {
-        // Convert to CSV
         if (data && data.length > 0) {
           const headers = Object.keys(data[0]);
           const csvRows = [headers.join(',')];
@@ -61,17 +59,17 @@ export default function MethodologyPage() {
         <h1 className="text-4xl font-black text-text-primary uppercase tracking-tight">
           Systems Audits & Transparency Metrics
         </h1>
-        <p className="text-base text-text-secondary leading-relaxed">
-          FandomRates acts as an independent auditor. We publish our database metrics and open source our parameters because transparency builds trust.
+        <p className="text-base text-text-secondary leading-relaxed font-semibold">
+          We show our work. Download the raw data, check our math, tell us where we're wrong. That's the point.
         </p>
       </div>
 
       {/* CSV/JSON Download Card */}
       <section className="p-6 border border-border rounded-2xl bg-surface space-y-6">
         <div>
-          <h3 className="text-lg font-black text-text-primary uppercase tracking-wider">Raw Database Exporters</h3>
+          <h3 className="text-lg font-black text-text-primary uppercase tracking-wider">Don't trust us? Good.</h3>
           <p className="text-xs text-text-secondary mt-1">
-            Expose and download raw platform parameters directly. No registration needed.
+            Download everything. CSV. JSON. Whatever you need. No account, no gatekeeping.
           </p>
         </div>
 
@@ -88,14 +86,7 @@ export default function MethodologyPage() {
                 onClick={() => handleExport('score_snapshots', 'csv')}
                 className="flex-1 py-2 text-[10px] font-black uppercase tracking-wider bg-surface border border-border hover:border-text-secondary rounded text-text-primary disabled:opacity-50"
               >
-                CSV
-              </button>
-              <button 
-                disabled={loading !== null}
-                onClick={() => handleExport('score_snapshots', 'json')}
-                className="flex-1 py-2 text-[10px] font-black uppercase tracking-wider bg-surface border border-border hover:border-text-secondary rounded text-text-primary disabled:opacity-50"
-              >
-                JSON
+                Score History (CSV)
               </button>
             </div>
           </div>
@@ -112,14 +103,7 @@ export default function MethodologyPage() {
                 onClick={() => handleExport('suspicious_profiles', 'csv')}
                 className="flex-1 py-2 text-[10px] font-black uppercase tracking-wider bg-surface border border-border hover:border-text-secondary rounded text-text-primary disabled:opacity-50"
               >
-                CSV
-              </button>
-              <button 
-                disabled={loading !== null}
-                onClick={() => handleExport('suspicious_profiles', 'json')}
-                className="flex-1 py-2 text-[10px] font-black uppercase tracking-wider bg-surface border border-border hover:border-text-secondary rounded text-text-primary disabled:opacity-50"
-              >
-                JSON
+                Flagged Users (CSV)
               </button>
             </div>
           </div>
@@ -136,14 +120,7 @@ export default function MethodologyPage() {
                 onClick={() => handleExport('anomaly_events', 'csv')}
                 className="flex-1 py-2 text-[10px] font-black uppercase tracking-wider bg-surface border border-border hover:border-text-secondary rounded text-text-primary disabled:opacity-50"
               >
-                CSV
-              </button>
-              <button 
-                disabled={loading !== null}
-                onClick={() => handleExport('anomaly_events', 'json')}
-                className="flex-1 py-2 text-[10px] font-black uppercase tracking-wider bg-surface border border-border hover:border-text-secondary rounded text-text-primary disabled:opacity-50"
-              >
-                JSON
+                Anomaly Events (CSV)
               </button>
             </div>
           </div>
@@ -152,14 +129,11 @@ export default function MethodologyPage() {
 
       {/* Technical definitions explained */}
       <section className="space-y-4 border-l-2 border-accent-gold pl-6">
-        <h3 className="text-lg font-black text-text-primary uppercase tracking-widest">1. Correlation, Not Causation</h3>
+        <h3 className="text-lg font-black text-text-primary uppercase tracking-widest">1. We show you the pattern. You decide what it means.</h3>
         <p className="text-sm text-text-secondary leading-relaxed">
-          FandomRates does not have access to per-episode ratings because no public API provides them. Instead, we correlate three data points:
-          <br /><strong className="text-text-primary">1. Air date schedules.</strong>
-          <br /><strong className="text-text-primary">2. Overall anime score averages tracked weekly.</strong>
-          <br /><strong className="text-text-primary">3. Reviews posted within a 3-day window of the release.</strong>
+          We can't see who rated what episode. No API gives us that. What we CAN see: when the score moved, and what reviews showed up right after. It's not proof — it's a pattern. You decide what it means.
           <br /><br />
-          When we say "Episode 1 shows bombing activity," we mean: "A score anomaly occurred the week Episode 1 aired, and an unusual number of low-score reviews were posted during that window." This is potential correlation, not proof of causation.
+          When we flag an episode, we're saying: "Something happened here." Maybe it's a bad episode. Maybe it's a campaign. We show you the when, the who, and the what. The why is yours to figure out.
         </p>
       </section>
 
@@ -168,16 +142,30 @@ export default function MethodologyPage() {
         <h3 className="text-lg font-black text-text-primary uppercase tracking-widest">2. Classifier Definitions</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="p-5 border border-border rounded-xl bg-surface space-y-2">
-            <h4 className="font-extrabold text-accent-gold text-sm uppercase">Rival Fandom Sabotage</h4>
+            <h4 className="font-extrabold text-accent-gold text-sm uppercase">Rival Fan Hit</h4>
             <p className="text-xs text-text-secondary leading-relaxed">
-              Triggered if a user gives a target show a 1/10 rating while their public favorites shelf explicitly lists verified rival anime.
+              Gave it a 1/10. Their favorites list is basically a shrine to the other show. Draw your own conclusions.
             </p>
           </div>
 
           <div className="p-5 border border-border rounded-xl bg-surface space-y-2">
-            <h4 className="font-extrabold text-accent-gold text-sm uppercase">Burner Accounts</h4>
+            <h4 className="font-extrabold text-accent-gold text-sm uppercase">Fresh Accounts</h4>
             <p className="text-xs text-text-secondary leading-relaxed">
-              Triggered if a profile was created fewer than 30 days ago, has fewer than 2 entries total in their lists, and leaves extreme ratings.
+              Account made last week. Rated one show: this one. Gave it a 1/10 or a 10/10. Nothing else on their list. Suspicious? You tell us.
+            </p>
+          </div>
+
+          <div className="p-5 border border-border rounded-xl bg-surface space-y-2">
+            <h4 className="font-extrabold text-accent-gold text-sm uppercase">The Extremist</h4>
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Only gives 1s and 10s. No nuance, no middle ground. Either everything is trash or everything is a masterpiece.
+            </p>
+          </div>
+
+          <div className="p-5 border border-border rounded-xl bg-surface space-y-2">
+            <h4 className="font-extrabold text-accent-gold text-sm uppercase">The Stan</h4>
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Gave it a 10/10. Their list has 3 shows total. All 10s. All from the same franchise. Not a critic — a cheerleader.
             </p>
           </div>
         </div>

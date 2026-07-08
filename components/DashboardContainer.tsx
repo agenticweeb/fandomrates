@@ -34,7 +34,6 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
     show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } }
   };
 
-  // Computes the actual aggregated platform averages across MAL + AL + Kitsu
   const getPlatformAverage = (animeId: number) => {
     const subset = snapshots.filter(s => s.anime_id === animeId);
     const platforms = ['anilist', 'mal', 'kitsu'];
@@ -77,7 +76,7 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
       animate="show"
       className="space-y-12"
     >
-      {/* Cinematic Hero */}
+      {/* Cinematic Fan-Native Hero */}
       <motion.section 
         variants={itemVariants}
         className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-surface to-background border border-border p-8 md:p-14 shadow-2xl"
@@ -86,17 +85,17 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,rgba(220,38,38,0.05),transparent_40%)]" />
         
         <div className="max-w-4xl space-y-6 relative z-10">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest bg-accent-gold/10 text-accent-gold border border-accent-gold/20 shadow-[0_0_10px_rgba(245,158,11,0.05)] animate-pulse">
-            ⚡ Anime Rating Integrity Index
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest bg-accent-gold/10 text-accent-gold border border-accent-gold/20">
+            Who's Cooking the Scores?
           </span>
           <h1 className="text-4xl md:text-6xl font-black text-text-primary tracking-tight leading-tight uppercase">
-            The Truth Behind <br/>
+            The Scores Don't Lie. <br/>
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent-cyan via-accent-mushoku to-accent-rezero">
-              The Platform Scores
+              But the Voters Might.
             </span>
           </h1>
           <p className="text-base md:text-lg text-text-secondary max-w-2xl leading-relaxed">
-            Exposing manipulation campaigns, coordinated review bombs, and burner ratings across mainstream media databases. We track. We analyze. We report.
+            Some fans rate with their hearts. Others rate with an agenda. We track both.
           </p>
         </div>
       </motion.section>
@@ -111,7 +110,6 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
             const animeB = battle.anime_b;
             if (!animeA || !animeB) return null;
 
-            // Resolve math-safe integrated values
             const statsA = getPlatformAverage(animeA.id);
             const statsB = getPlatformAverage(animeB.id);
 
@@ -122,7 +120,6 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
                 whileHover={{ scale: 1.01 }}
                 className="group relative border border-border rounded-2xl bg-surface overflow-hidden shadow-2xl hover:border-text-secondary/25 transition-all duration-300"
               >
-                {/* Horizontal glowing gradients */}
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-accent-mushoku via-accent-gold to-accent-rezero" />
                 
                 <div className="p-6 md:p-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative overflow-hidden">
@@ -140,22 +137,19 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
                     </div>
                     <div className="space-y-2 text-center sm:text-left">
                       <span className="text-[9px] font-black uppercase bg-accent-mushoku/20 text-accent-mushoku px-2.5 py-0.5 rounded border border-accent-mushoku/30">
-                        Challenger A
+                        The Contender
                       </span>
                       <h3 className="font-extrabold text-xl text-text-primary group-hover:text-accent-cyan transition-colors">{animeA.title_english}</h3>
                       <div className="flex flex-wrap gap-4 justify-center sm:justify-start font-mono font-black text-sm pt-2">
                         <div className="text-center sm:text-left">
                           <span className="text-[10px] text-text-secondary block font-bold uppercase tracking-widest">Platform Average</span>
-                          <span className="text-xl text-accent-cyan">{statsA.currentAvg.toFixed(2)}</span>
-                          <span className={`inline-block ml-1 text-xs ${statsA.delta >= 0 ? 'text-success' : 'text-danger'}`}>
-                            {statsA.delta >= 0 ? `↑ +${statsA.delta.toFixed(2)}` : `↓ ${statsA.delta.toFixed(2)}`}
-                          </span>
+                          <span className="text-xl text-accent-cyan">AL: {statsA.currentAvg.toFixed(2)} (flat)</span>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Central clash separator */}
+                  {/* Central VS Divider */}
                   <div className="lg:col-span-2 flex flex-col items-center justify-center text-center z-10">
                     <span className="text-xs font-black text-accent-gold tracking-widest uppercase mb-1">vs</span>
                     <div className="h-0.5 w-16 bg-gradient-to-r from-accent-mushoku via-accent-gold to-accent-rezero rounded" />
@@ -172,16 +166,13 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
                     </div>
                     <div className="space-y-2 text-center sm:text-right">
                       <span className="text-[9px] font-black uppercase bg-accent-rezero/20 text-accent-rezero px-2.5 py-0.5 rounded border border-accent-rezero/30">
-                        Challenger B
+                        The Rival
                       </span>
                       <h3 className="font-extrabold text-xl text-text-primary group-hover:text-accent-cyan transition-colors">{animeB.title_english}</h3>
                       <div className="flex flex-wrap gap-4 justify-center sm:justify-end font-mono font-black text-sm pt-2">
                         <div>
                           <span className="text-[10px] text-text-secondary block font-bold uppercase tracking-widest">Platform Average</span>
-                          <span className="text-xl text-accent-cyan">{statsB.currentAvg.toFixed(2)}</span>
-                          <span className={`inline-block ml-1 text-xs ${statsB.delta >= 0 ? 'text-success' : 'text-danger'}`}>
-                            {statsB.delta >= 0 ? `↑ +${statsB.delta.toFixed(2)}` : `↓ ${statsB.delta.toFixed(2)}`}
-                          </span>
+                          <span className="text-xl text-accent-cyan">AL: {statsB.currentAvg.toFixed(2)} (flat)</span>
                         </div>
                       </div>
                     </div>
@@ -192,14 +183,14 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
                     <span className="text-xs text-text-secondary font-mono">
-                      Analytic verification models active
+                      Tracking live
                     </span>
                   </div>
                   <Link 
                     href={`/battle/${battle.slug}`} 
                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-black text-background bg-text-primary hover:bg-text-primary/95 transition-all text-center justify-center uppercase tracking-wider"
                   >
-                    Enter Arena ⚔️
+                    View the War Room ⚔️
                   </Link>
                 </div>
               </motion.div>
@@ -244,8 +235,8 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
           ) : (
             <div className="p-8 text-center text-sm text-text-secondary flex flex-col items-center justify-center gap-2">
               <span className="text-3xl">🟢</span>
-              <p className="font-extrabold text-text-primary uppercase tracking-widest">All Clear</p>
-              <p className="text-xs text-text-secondary">No sudden drops or spikes exceeding ±0.30 registered on recent runs.</p>
+              <p className="font-extrabold text-text-primary uppercase tracking-widest">Quiet week</p>
+              <p className="text-xs text-text-secondary">No coordinated campaigns detected. Yet.</p>
             </div>
           )}
         </div>
