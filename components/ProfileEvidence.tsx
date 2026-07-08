@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { SuspiciousProfile } from '@/types';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface ProfileEvidenceProps {
   profiles: SuspiciousProfile[];
@@ -10,122 +11,206 @@ interface ProfileEvidenceProps {
 
 export default function ProfileEvidence({ profiles, animeMap }: ProfileEvidenceProps) {
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [search, setSearch] = useState<string>('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const rowsPerPage = 20;
 
-  if (!profiles || profiles.length === 0) {
-    return (
-      <div className="p-8 border border-border rounded-xl bg-surface text-center">
-        <p className="text-sm text-text-secondary">No suspicious profiles have been flagged in recent audits.</p>
-      </div>
-    );
-  }
+  // Filter profiles based on search query and category filters
+  const filteredProfiles = useMemo(() => {
+    return profiles.filter((p) => {
+      const matchSearch = (p.display_id || p.username || '').toLowerCase().includes(search.toLowerCase());
+      const matchCategory = categoryFilter === 'all' || p.category === categoryFilter;
+      return matchSearch && matchCategory;
+    });
+  }, [profiles, search, categoryFilter]);
+
+  // Handle pagination indexing
+  const paginatedProfiles = useMemo(() => {
+    const startIndex = (currentPage - 1) * rowsPerPage;
+    return filteredProfiles.slice(startIndex, startIndex + rowsPerPage);
+  }, [filteredProfiles, currentPage]);
+
+  const totalPages = Math.ceil(filteredProfiles.length / rowsPerPage);
 
   const categoryLabels: { [key: string]: { label: string; style: string } } = {
-    rival_fandom: { label: 'Rival Fandom Sabotage', style: 'bg-danger/10 text-danger border-danger/20' },
-    burner: { label: 'Burner Account', style: 'bg-accent-gold/10 text-accent-gold border-accent-gold/20' },
-    inflation: { label: 'Rating Inflation', style: 'bg-accent-mushoku/10 text-accent-mushoku border-accent-mushoku/20' },
-    unknown: { label: 'Irregular Pattern', style: 'bg-surface-elevated text-text-secondary border-border' },
+    rival_fandom: { label: 'Rival Fandom Sabotage', style: 'bg-danger/10 text-danger border-danger/30' },
+    burner: { label: 'Burner Account', style: 'bg-accent-gold/10 text-accent-gold border-accent-gold/30 shadow-[0_0_10px_rgba(245,158,11,0.05)]' },
+    inflation: { label: 'Rating Inflation', style: 'bg-accent-mushoku/10 text-accent-mushoku border-accent-mushoku/30' },
+    unknown: { label: 'Suspicious Score Spread', style: 'bg-surface-elevated text-text-secondary border-border' },
   };
 
   return (
-    <div className="border border-border rounded-xl bg-surface overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-surface-elevated/50 text-xs font-bold uppercase tracking-wider text-text-secondary border-b border-border">
-              <th className="p-4">Anonymized Identifier</th>
-              <th className="p-4">Target Show</th>
-              <th className="p-4">Platform</th>
-              <th className="p-4">Rating Given</th>
-              <th className="p-4">Classification</th>
-              <th className="p-4 text-right">Inspection</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/60 text-sm">
-            {profiles.map((profile) => {
-              const badge = categoryLabels[profile.category ?? 'unknown'] || categoryLabels.unknown;
-              const isExpanded = expandedId === profile.id;
-              
-              // Resolve mapped target show metadata
-              const targetAnime = animeMap[profile.anime_id] || { 
-                title: 'Unknown Title', 
-                colorClass: 'text-text-secondary bg-surface', 
-                borderClass: 'border-border' 
-              };
+    <div className="space-y-6">
+      {/* Filters & Control bar */}
+      <div className="flex flex-col md:flex-row gap-4 justify-between bg-surface/50 p-4 border border-border rounded-xl">
+        <input
+          type="text"
+          placeholder="Search by anonymized handle (e.g. user_...)"
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+          className="flex-grow max-w-md rounded-lg border border-border bg-background p-2.5 text-xs text-text-primary focus:outline-none focus:border-accent-cyan"
+        />
 
-              return (
-                <React.Fragment key={profile.id}>
-                  <tr className="hover:bg-surface-elevated/20 transition-colors">
-                    <td className="p-4 font-mono font-medium text-text-primary">
-                      {profile.display_id || 'user_anon'}
-                    </td>
-                    <td className="p-4">
-                      <span className={`inline-flex px-2.5 py-0.5 text-xs font-semibold rounded border ${targetAnime.colorClass} ${targetAnime.borderClass}`}>
-                        {targetAnime.title}
-                      </span>
-                    </td>
-                    <td className="p-4 text-xs uppercase font-bold tracking-wider text-text-secondary">
-                      {profile.platform}
-                    </td>
-                    <td className="p-4">
-                      <span className="font-semibold text-text-primary bg-background border border-border px-2 py-0.5 rounded">
-                        {profile.rating_given}/10
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      <span className={`inline-flex px-2.5 py-0.5 text-xs font-medium rounded-full border ${badge.style}`}>
-                        {badge.label}
-                      </span>
-                    </td>
-                    <td className="p-4 text-right">
-                      <button
-                        onClick={() => setExpandedId(isExpanded ? null : profile.id)}
-                        className="text-xs text-accent-cyan hover:underline hover:text-accent-cyan/80 font-medium"
-                      >
-                        {isExpanded ? 'Hide Payload' : 'Audit Data'}
-                      </button>
-                    </td>
-                  </tr>
+        <div className="flex items-center gap-3">
+          <label className="text-xs font-black uppercase tracking-widest text-text-secondary">Class:</label>
+          <select
+            value={categoryFilter}
+            onChange={(e) => { setCategoryFilter(e.target.value); setCurrentPage(1); }}
+            className="rounded-lg border border-border bg-surface px-4 py-2 text-xs font-extrabold text-text-primary focus:outline-none"
+          >
+            <option value="all">Show All Profiles</option>
+            <option value="rival_fandom">Rival Fandom Sabotage</option>
+            <option value="burner">Burners Only</option>
+            <option value="inflation">Score Inflation</option>
+            <option value="unknown">Suspicious Spread</option>
+          </select>
+        </div>
+      </div>
 
-                  {isExpanded && (
-                    <tr className="bg-background/40">
-                      <td colSpan={6} className="p-6 border-b border-border">
-                        <div className="bg-[#050508] border border-border/80 rounded-lg p-4 font-mono text-xs text-text-secondary overflow-x-auto max-w-4xl mx-auto">
-                          <p className="text-text-primary mb-2 font-semibold">// Audit Trail Evidence Payload</p>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 text-text-secondary border-b border-border/50 pb-4">
-                            <div>
-                              <span className="text-accent-gold">Account Age:</span> {profile.evidence?.account_age_days ? `${Math.round(profile.evidence.account_age_days)} days` : 'N/A'}
-                            </div>
-                            <div>
-                              <span className="text-accent-gold">Library List Size:</span> {profile.evidence?.list_count ?? 'N/A'} completed entries
-                            </div>
-                            <div>
-                              <span className="text-accent-gold">Mean Given Score:</span> {profile.evidence?.mean_score ?? 'N/A'} / 10
-                            </div>
-                            <div>
-                              <span className="text-accent-gold">Platform Flagged ID:</span> {profile.platform_user_id || 'Hidden'}
-                            </div>
-                          </div>
-                          <div>
-                            <span className="text-text-primary font-semibold">// Public Favorites Shelf Preview:</span>
-                            {profile.evidence?.favorites && profile.evidence.favorites.length > 0 ? (
-                              <ul className="list-disc pl-5 mt-1 space-y-1">
-                                {profile.evidence.favorites.map((fav: string, i: number) => (
-                                  <li key={i} className="text-text-secondary">{fav}</li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <p className="italic text-text-secondary mt-1">Favorites shelf set to private or empty.</p>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+      {/* Main Table view */}
+      <div className="border border-border rounded-xl bg-surface overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-surface-elevated/50 text-[10px] font-black uppercase tracking-widest text-text-secondary border-b border-border">
+                <th className="p-4">Anonymized Identifier</th>
+                <th className="p-4">Target Show</th>
+                <th className="p-4">Platform</th>
+                <th className="p-4">Rating Given</th>
+                <th className="p-4">Classification</th>
+                <th className="p-4 text-right">Inspection</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/60 text-sm">
+              {paginatedProfiles.length > 0 ? (
+                paginatedProfiles.map((profile) => {
+                  const badge = categoryLabels[profile.category ?? 'unknown'] || categoryLabels.unknown;
+                  const isExpanded = expandedId === profile.id;
+                  const targetAnime = animeMap[profile.anime_id] || { 
+                    title: 'Unknown Title', 
+                    colorClass: 'text-text-secondary bg-surface', 
+                    borderClass: 'border-border' 
+                  };
+
+                  return (
+                    <React.Fragment key={profile.id}>
+                      <tr className="hover:bg-surface-elevated/20 transition-colors">
+                        <td className="p-4 font-mono font-extrabold text-text-primary">
+                          {profile.display_id || 'user_anon'}
+                        </td>
+                        <td className="p-4">
+                          <span className={`inline-flex px-2.5 py-1 text-[11px] font-black rounded border ${targetAnime.colorClass} ${targetAnime.borderClass}`}>
+                            {targetAnime.title}
+                          </span>
+                        </td>
+                        <td className="p-4 text-xs font-black uppercase tracking-wider text-text-secondary">
+                          {profile.platform}
+                        </td>
+                        <td className="p-4">
+                          <span className="font-mono font-black text-text-primary bg-background border border-border px-2.5 py-1 rounded">
+                            {profile.rating_given}/10
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <span className={`inline-flex px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${badge.style}`}>
+                            {badge.label}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right">
+                          <button
+                            onClick={() => setExpandedId(isExpanded ? null : profile.id)}
+                            className="text-xs font-bold text-accent-cyan hover:underline hover:text-accent-cyan/80"
+                          >
+                            {isExpanded ? 'Hide Payload' : 'Audit Data'}
+                          </button>
+                        </td>
+                      </tr>
+
+                      {/* Animated expandable proof payload */}
+                      <AnimatePresence>
+                        {isExpanded && (
+                          <tr className="bg-background/40">
+                            <td colSpan={6} className="p-0 border-b border-border">
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.2 }}
+                                className="overflow-hidden p-6"
+                              >
+                                <div className="bg-[#050508] border border-border/80 rounded-xl p-5 font-mono text-xs text-text-secondary overflow-x-auto max-w-4xl mx-auto">
+                                  <p className="text-accent-gold mb-3 font-black">// AUDIT TRAIL LOG EVIDENCE PAYLOAD</p>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 text-text-secondary border-b border-border/50 pb-4">
+                                    <div>
+                                      <span className="text-text-primary font-bold">Account Age:</span> {profile.evidence?.account_age_days ? `${Math.round(profile.evidence.account_age_days)} days` : 'N/A'}
+                                    </div>
+                                    <div>
+                                      <span className="text-text-primary font-bold">Library List Size:</span> {profile.evidence?.list_count ?? 'N/A'} entries
+                                    </div>
+                                    <div>
+                                      <span className="text-text-primary font-bold">Mean Given Score:</span> {profile.evidence?.mean_score ?? 'N/A'} / 10
+                                    </div>
+                                    <div>
+                                      <span className="text-text-primary font-bold">Platform Flagged ID:</span> {profile.platform_user_id || 'Hidden'}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <span className="text-text-primary font-bold">// Public Favorites Shelf Preview:</span>
+                                    {profile.evidence?.favorites && profile.evidence.favorites.length > 0 ? (
+                                      <ul className="list-disc pl-5 mt-2 space-y-1 text-text-secondary">
+                                        {profile.evidence.favorites.map((fav: string, i: number) => (
+                                          <li key={i}>{fav}</li>
+                                        ))}
+                                      </ul>
+                                    ) : (
+                                      <p className="italic text-text-secondary mt-1">Favorites shelf set to private or empty.</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </motion.div>
+                            </td>
+                          </tr>
+                        )}
+                      </AnimatePresence>
+                    </React.Fragment>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={6} className="p-8 text-center text-xs text-text-secondary">
+                    No suspicious profiles flagged matching search criteria.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination controls */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-border bg-surface-elevated/40 p-4 text-xs font-bold text-text-secondary">
+            <span>
+              Showing Page {currentPage} of {totalPages}
+            </span>
+            <div className="flex gap-2">
+              <button
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                className="px-3 py-1.5 rounded border border-border bg-surface hover:bg-surface-elevated hover:text-text-primary disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <button
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                className="px-3 py-1.5 rounded border border-border bg-surface hover:bg-surface-elevated hover:text-text-primary disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
