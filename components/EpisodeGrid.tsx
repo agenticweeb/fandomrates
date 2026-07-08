@@ -25,23 +25,20 @@ export default function EpisodeGrid({
   const [selectedSeasonId, setSelectedSeasonId] = useState<number>(0);
   const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const episodesPerPage = 8; // Compact view mapping prevents scroll bloat
+  const episodesPerPage = 8;
 
-  // Set default active season ID on mounting
   React.useEffect(() => {
     if (seasons.length > 0) {
       setSelectedSeasonId(seasons[0].id);
     }
   }, [seasons]);
 
-  // Extract episodes matching selection
   const filteredEpisodes = useMemo(() => {
     return episodes
       .filter((ep) => ep.season_id === selectedSeasonId)
       .sort((a, b) => a.episode_number - b.episode_number);
   }, [episodes, selectedSeasonId]);
 
-  // Handle cascading page changes on shifting seasons
   const handleSeasonChange = (id: number) => {
     setSelectedSeasonId(id);
     setCurrentPage(1);
@@ -75,19 +72,7 @@ export default function EpisodeGrid({
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             <AnimatePresence mode="popLayout">
               {paginatedEpisodes.map((ep) => {
-                // Find matching weekly snapshots score
-                const epDate = ep.aired_date ? new Date(ep.aired_date) : null;
-                let matchedScore: number | null = null;
-                if (epDate && snapshots.length > 0) {
-                  const closest = snapshots.reduce((prev, curr) => {
-                    const prevDiff = Math.abs(new Date(prev.scraped_at).getTime() - epDate.getTime());
-                    const currDiff = Math.abs(new Date(curr.scraped_at).getTime() - epDate.getTime());
-                    return currDiff < prevDiff ? prev : curr;
-                  });
-                  matchedScore = closest.score;
-                }
-
-                // Check anomaly windows (within 3 days)
+                // Find matching anomaly week (within 3 days of air date)
                 const isAnomalyWeek = anomalies.some((anom) => {
                   if (!ep.aired_date) return false;
                   const anomTime = new Date(anom.detected_at).getTime();
@@ -108,7 +93,7 @@ export default function EpisodeGrid({
                   >
                     <EpisodeCard
                       episode={ep}
-                      overallScore={matchedScore}
+                      overallScore={ep.rating ? Number(ep.rating) : null}
                       anomalyDetected={isAnomalyWeek}
                       reviewCount={epReviews.length}
                       onClick={() => setSelectedEpisode(ep)}
@@ -149,17 +134,7 @@ export default function EpisodeGrid({
       {/* 3. Detail modal wrapper */}
       {selectedEpisode && (() => {
         const epDate = selectedEpisode.aired_date ? new Date(selectedEpisode.aired_date) : null;
-        let matchedScore: number | null = null;
         let matchedAnomaly: AnomalyEvent | null = null;
-
-        if (epDate && snapshots.length > 0) {
-          const closest = snapshots.reduce((prev, curr) => {
-            const prevDiff = Math.abs(new Date(prev.scraped_at).getTime() - epDate.getTime());
-            const currDiff = Math.abs(new Date(curr.scraped_at).getTime() - epDate.getTime());
-            return currDiff < prevDiff ? prev : curr;
-          });
-          matchedScore = closest.score;
-        }
 
         if (epDate) {
           matchedAnomaly = anomalies.find((anom) => {
@@ -175,7 +150,7 @@ export default function EpisodeGrid({
           <EpisodeDetail
             episode={selectedEpisode}
             reviews={epReviews}
-            overallScoreWeekOfAiring={matchedScore}
+            overallScoreWeekOfAiring={selectedEpisode.rating ? Number(selectedEpisode.rating) : null}
             anomalyDetected={matchedAnomaly !== null}
             scoreBefore={matchedAnomaly ? Number(matchedAnomaly.score_before) : null}
             scoreAfter={matchedAnomaly ? Number(matchedAnomaly.score_after) : null}

@@ -19,8 +19,8 @@ export interface Season {
   id: number;
   anime_id: number;
   season_number: number;
-  anilist_ids: number[] | null; // Updated to arrays supporting multi-cours
-  mal_ids: number[] | null;     // Updated to arrays supporting multi-cours
+  anilist_ids: number[] | null;
+  mal_ids: number[] | null;
   title: string | null;
   title_english: string | null;
   title_romaji: string | null;
@@ -41,6 +41,8 @@ export interface Episode {
   aired_date: string | null;
   thumbnail_url: string | null;
   created_at: string;
+  rating: number | null;     // Mapped to episodes.rating
+  vote_count: number | null; // Mapped to episodes.vote_count
 }
 
 export interface Review {
