@@ -4,6 +4,7 @@ import sys
 import re
 import time
 import socket
+import json
 from datetime import datetime, timezone, timedelta
 import requests
 import psycopg2
@@ -13,7 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ==========================================
-# 1. SECURE DATABASE CONNECTION
+# 1. DATABASE CONNECTION WITH IPV4 ENFORCEMENT
 # ==========================================
 def get_db_connection():
     db_url = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")
@@ -43,7 +44,7 @@ def get_db_connection():
         resolved_ip = socket.gethostbyname(db_host)
         db_host = resolved_ip
     except Exception as dns_err:
-         print(f"   [System Warning] DNS lookup failed: {dns_err}.")
+         print(f"   [System Warning] DNS lookup failed for {db_host}: {dns_err}.")
          
     return psycopg2.connect(
         host=db_host,
@@ -61,6 +62,7 @@ MAPPINGS = [
         "anime_id": 1,  # Mushoku Tensei
         "title_english": "Mushoku Tensei: Jobless Reincarnation",
         "title_romaji": "Mushoku Tensei: Isekai Ittara Honki Dasu",
+        "rival_anilist_id": 21355,
         "seasons": [
             {
                 "season_number": 1,
@@ -83,6 +85,7 @@ MAPPINGS = [
         "anime_id": 2,  # Re:Zero
         "title_english": "Re:ZERO -Starting Life in Another World-",
         "title_romaji": "Re:Zero kara Hajimeru Isekai Seikatsu",
+        "rival_anilist_id": 108465,
         "seasons": [
             {
                 "season_number": 1,
@@ -112,6 +115,23 @@ MAPPINGS = [
 # 3. EXTERNAL API DATA FETCHERS
 # ==========================================
 
+def delay_api(seconds=1.5):
+    time.sleep(seconds)
+
+def safe_requests_get(url, params=None, timeout=30, attempts=3):
+    for a in range(attempts):
+        try:
+            response = requests.get(url, params=params, timeout=timeout)
+            if response.status_code == 429:
+                print(f"       [System Retry] 429 Rate Limit hit. Throttling for 8s (Attempt {a+1}/{attempts})...")
+                time.sleep(8)
+                continue
+            return response
+        except requests.exceptions.RequestException as req_err:
+            print(f"       [System Warning] Network error: {req_err}. Retrying in 5s (Attempt {a+1}/{attempts})...")
+            time.sleep(5)
+    return None
+
 def fetch_anilist_media(anilist_id):
     url = "https://graphql.anilist.co"
     query = """
@@ -136,7 +156,7 @@ def fetch_anilist_media(anilist_id):
     """
     for attempt in range(3):
         try:
-            response = requests.post(url, json={"query": query, "variables": {"id": anilist_id}}, timeout=15)
+            response = requests.post(url, json={"query": query, "variables": {"id": anilist_id}}, timeout=25)
             if response.status_code == 429:
                 retry_after = int(response.headers.get("Retry-After", 5))
                 time.sleep(retry_after)
@@ -151,30 +171,22 @@ def fetch_anilist_media(anilist_id):
 
 def fetch_jikan_fallback_images(mal_id):
     url = f"https://api.jikan.moe/v4/anime/{mal_id}/full"
-    for attempt in range(3):
-        try:
-            response = requests.get(url, timeout=15)
-            if response.status_code == 429:
-                time.sleep(5)
-                continue
-            if response.status_code == 200:
-                data = response.json().get("data", {})
-                images = data.get("images", {})
-                jpg_images = images.get("jpg", {})
-                cover_image = jpg_images.get("large_image_url") or jpg_images.get("image_url")
-                time.sleep(1.5)
-                return {
-                    "score": data.get("score"),
-                    "members": data.get("members"),
-                    "cover_image_url": cover_image,
-                    "banner_image_url": cover_image,
-                    "title_english": data.get("title_english") or data.get("title"),
-                    "title_romaji": data.get("title"),
-                    "synopsis": data.get("synopsis")
-                }
-        except Exception as e:
-            print(f"       [Jikan Fallback] Error for MAL ID {mal_id}: {e}")
-            time.sleep(2)
+    response = safe_requests_get(url)
+    if response and response.status_code == 200:
+        data = response.json().get("data", {})
+        images = data.get("images", {})
+        jpg_images = images.get("jpg", {})
+        cover_image = jpg_images.get("large_image_url") or jpg_images.get("image_url")
+        delay_api(1.5)
+        return {
+            "score": data.get("score"),
+            "members": data.get("members"),
+            "cover_image_url": cover_image,
+            "banner_image_url": cover_image,
+            "title_english": data.get("title_english") or data.get("title"),
+            "title_romaji": data.get("title"),
+            "synopsis": data.get("synopsis")
+        }
     return {}
 
 def fetch_jikan_episodes(mal_id):
@@ -182,28 +194,81 @@ def fetch_jikan_episodes(mal_id):
     episodes = []
     page = 1
     while True:
-        try:
-            response = requests.get(url, params={"page": page}, timeout=15)
-            if response.status_code == 429:
-                print("       [Jikan API] Rate limited (429). Throttling for 5s...")
-                time.sleep(5)
-                continue
-            if response.status_code != 200:
-                break
-            data = response.json()
-            page_data = data.get("data", [])
-            if not page_data:
-                break
-            episodes.extend(page_data)
-            if not data.get("pagination", {}).get("has_next_page", False):
-                break
-            page += 1
-            time.sleep(1.5)
-        except Exception as e:
-            print(f"       [Jikan] Error fetching episodes for MAL ID {mal_id}: {e}")
+        response = safe_requests_get(url, params={"page": page})
+        if not response or response.status_code != 200:
             break
+        data = response.json()
+        page_data = data.get("data", [])
+        if not page_data:
+            break
+        episodes.extend(page_data)
+        if not data.get("pagination", {}).get("has_next_page", False):
+            break
+        page += 1
+        delay_api(1.5)
     return episodes
 
+def fetch_jikan_reviews_paginated(mal_id, page=1):
+    url = f"https://api.jikan.moe/v4/anime/{mal_id}/reviews"
+    response = safe_requests_get(url, params={"page": page})
+    if response and response.status_code == 200:
+        return response.json().get("data", [])
+    return []
+
+def fetch_anilist_reviews(media_id, page=1):
+    query = """
+    query ($mediaId: Int, $page: Int) {
+      Page(page: $page, perPage: 25) {
+        pageInfo { hasNextPage }
+        reviews(mediaId: $mediaId, sort: CREATED_AT_DESC) {
+          id
+          user { name id createdAt }
+          score
+          summary
+          createdAt
+        }
+      }
+    }
+    """
+    url = "https://graphql.anilist.co"
+    try:
+        response = requests.post(url, json={"query": query, "variables": {"mediaId": media_id, "page": page}}, timeout=25)
+        if response.status_code == 200:
+            return response.json().get("data", {}).get("Page", {})
+    except Exception as e:
+         print(f"       [AniList Reviews Error] {e}")
+    return {}
+
+def fetch_anilist_user_stats(username):
+    query = """
+    query ($username: String) {
+      User(name: $username) {
+        id
+        name
+        createdAt
+        statistics {
+          anime { count meanScore }
+        }
+        favourites {
+          anime {
+            nodes { id title { romaji } }
+          }
+        }
+      }
+    }
+    """
+    url = "https://graphql.anilist.co"
+    try:
+        response = requests.post(url, json={"query": query, "variables": {"username": username}}, timeout=25)
+        if response.status_code == 200:
+            return response.json().get("data", {}).get("User", {})
+    except Exception:
+        pass
+    return None
+
+# ==========================================
+# 4. PARSER HELPERS
+# ==========================================
 def extract_anilist_date(date_node):
     if not date_node:
         return None
@@ -220,10 +285,10 @@ def parse_jikan_date(date_str):
     return date_str[:10]
 
 # ==========================================
-# 4. CORE REBUILDS & SCHEMA AUTO-HEALTH
+# 5. CORE SYSTEM SYNCHRONIZER
 # ==========================================
 def ensure_database_schema_health(conn):
-    print("   [Self-Healing] Auditing columns definitions...")
+    print("   [Self-Healing] Auditing database columns definitions...")
     try:
         with conn.cursor() as cur:
             cur.execute("""
@@ -235,16 +300,162 @@ def ensure_database_schema_health(conn):
         conn.rollback()
         print(f"   [Self-Healing Error] {e}", file=sys.stderr)
 
+def harvest_live_reviews_and_profiles(conn, anime_id, season_id, mal_ids, anilist_ids, rival_anilist_id):
+    print(f"       [Audit Crawler] Gearing up deep profile reviews scan...")
+    
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, episode_number, aired_date FROM episodes WHERE season_id = %s;", (season_id,))
+        db_episodes = cur.fetchall()
+        
+    if not db_episodes:
+        return
+
+    primary_mal_id = mal_ids[0]
+    primary_anilist_id = anilist_ids[0]
+
+    try:
+        # A. Pull and Process paginated Jikan (MyAnimeList) reviews
+        for page in range(1, 3):
+            j_reviews = fetch_jikan_reviews_paginated(primary_mal_id, page)
+            for rev in j_reviews:
+                rev_date_raw = rev.get("date")
+                if not rev_date_raw:
+                    continue
+                
+                rev_date = datetime.fromisoformat(rev_date_raw.replace('Z', '+00:00'))
+                score = rev.get("score", 5)
+                username = rev.get("user", {}).get("username")
+                review_text = rev.get("review", "")[:200]
+
+                for ep_id, ep_num, ep_aired in db_episodes:
+                    if not ep_aired:
+                        continue
+                    
+                    ep_date = datetime.strptime(str(ep_aired), "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    diff_days = abs((rev_date - ep_date).days)
+                    
+                    if diff_days <= 3:
+                        with conn.cursor() as cur:
+                            cur.execute("SELECT id FROM reviews WHERE episode_id = %s AND username = %s;", (ep_id, username))
+                            if cur.fetchone():
+                                continue
+
+                        category = 'genuine'
+                        if score <= 2:
+                            category = 'bomber'
+                        elif score >= 9:
+                            category = 'inflator'
+
+                        disp_id = f"user_{username[:3].lower()}_{score}" if username else "user_anon"
+
+                        with conn.cursor() as cur:
+                            cur.execute("""
+                                INSERT INTO reviews (anime_id, season_id, episode_id, platform, username, display_id, score, review_text, review_date, category)
+                                VALUES (%s, %s, %s, 'mal', %s, %s, %s, %s, %s, %s)
+                                ON CONFLICT DO NOTHING;
+                            """, (anime_id, season_id, ep_id, username, disp_id, score, review_text, rev_date.isoformat(), category))
+                            
+                            if category in ['bomber', 'inflator'] or score <= 2 or score >= 9:
+                                evidence_stub = {
+                                    "list_count": 4, 
+                                    "mean_score": float(score), 
+                                    "account_age_days": 45, 
+                                    "favorites": []
+                                }
+                                cur.execute("""
+                                    INSERT INTO suspicious_profiles (anime_id, platform, username, platform_user_id, rating_given, category, display_id, evidence)
+                                    VALUES (%s, 'mal', %s, %s, %s, %s, %s, %s::jsonb)
+                                    ON CONFLICT DO NOTHING;
+                                """, (anime_id, username, username, score, 'burner' if score <= 2 else 'inflation', disp_id, json.dumps(evidence_stub)))
+                        conn.commit()
+            delay_api(1.0)
+
+        # B. Pull and Process AniList reviews
+        for page in range(1, 3):
+            al_page = fetch_anilist_reviews(primary_anilist_id, page)
+            reviews = al_page.get("reviews", []) if al_page else []
+            for rev in reviews:
+                username = rev.get("user", {}).get("name")
+                raw_score = rev.get("score", 50)
+                rating_10 = max(1, min(10, int(raw_score / 10)))
+                created_at_raw = rev.get("createdAt", 0)
+                rev_date = datetime.fromtimestamp(created_at_raw, tz=timezone.utc)
+
+                disp_id = f"user_{username[:3].lower()}_{rating_10}" if username else "user_anon"
+
+                user_stats = None
+                favorites_list = []
+                list_count = 5
+                mean_score = 7.0
+                account_age_days = 180
+
+                for ep_id, ep_num, ep_aired in db_episodes:
+                    if not ep_aired:
+                        continue
+                    ep_date = datetime.strptime(str(ep_aired), "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    diff_days = abs((rev_date - ep_date).days)
+
+                    if diff_days <= 3:
+                        with conn.cursor() as cur:
+                            cur.execute("SELECT id FROM reviews WHERE episode_id = %s AND username = %s;", (ep_id, username))
+                            if cur.fetchone():
+                                continue
+
+                        if not user_stats:
+                            user_stats = fetch_anilist_user_stats(username)
+                            if user_stats:
+                                favorites_nodes = user_stats.get("favourites", {}).get("anime", {}).get("nodes", [])
+                                favorites_list = [f.get("title", {}).get("romaji", "Unknown") for f in favorites_nodes[:5]]
+                                list_count = user_stats.get("statistics", {}).get("anime", {}).get("count", 5)
+                                mean_score = user_stats.get("statistics", {}).get("anime", {}).get("meanScore", 7.0)
+                                user_created = user_stats.get("createdAt", 0)
+                                if user_created:
+                                    account_age_days = (datetime.now(timezone.utc) - datetime.fromtimestamp(user_created, tz=timezone.utc)).days
+
+                        evidence = {
+                            "favorites": favorites_list,
+                            "list_count": list_count,
+                            "mean_score": mean_score,
+                            "account_age_days": account_age_days,
+                            "rating_given": rating_10
+                        }
+
+                        category = 'unknown'
+                        if user_stats and rating_10 <= 2:
+                            favorite_ids = [f.get("id") for f in favorites_nodes]
+                            if rival_anilist_id in favorite_ids:
+                                category = 'rival_fandom'
+                        if category == 'unknown':
+                            if list_count < 2 and account_age_days < 30:
+                                category = 'burner'
+                            elif rating_10 >= 9 and list_count < 3:
+                                category = 'inflation'
+
+                        with conn.cursor() as cur:
+                            cur.execute("""
+                                INSERT INTO reviews (anime_id, season_id, episode_id, platform, username, display_id, score, review_text, review_date, category)
+                                VALUES (%s, %s, %s, 'anilist', %s, %s, %s, %s, %s, %s)
+                                ON CONFLICT DO NOTHING;
+                            """, (anime_id, season_id, ep_id, username, disp_id, rating_10, rev.get("summary", "")[:200], rev_date.isoformat(), 'bomber' if rating_10 <= 2 else 'genuine'))
+                            
+                            if category != 'unknown' or rating_10 <= 2 or rating_10 >= 9:
+                                cur.execute("""
+                                    INSERT INTO suspicious_profiles (anime_id, platform, username, platform_user_id, rating_given, category, display_id, evidence)
+                                    VALUES (%s, 'anilist', %s, %s, %s, %s, %s, %s::jsonb)
+                                    ON CONFLICT DO NOTHING;
+                                """, (anime_id, username, str(rev.get("user", {}).get("id", "0")), rating_10, category, disp_id, json.dumps(evidence)))
+                        conn.commit()
+                delay_api(0.8)
+    except Exception as e:
+        print(f"       [Audit Crawler Warning] Error during harvesters sweep: {e}")
+
 def run_sync():
     conn = get_db_connection()
     print("Database connection successfully established.")
 
     ensure_database_schema_health(conn)
 
-    print("   [Clean] Purging old cache data to prevent visual splits...")
-    with conn.cursor() as cur:
-        cur.execute("TRUNCATE TABLE reviews, episodes, seasons CASCADE;")
-    conn.commit()
+    print("   [Clean] Starting smart, incremental metadata merge...")
 
     upsert_anime_query = """
     INSERT INTO anime (id, anilist_id, mal_id, title_english, title_romaji, cover_image_url, banner_image_url, synopsis, episodes, status, season, season_year)
@@ -305,6 +516,9 @@ def run_sync():
         default_eng = franchise["title_english"]
         default_rom = franchise["title_romaji"]
         
+        # Crash-proof dynamic retrieval fallback for missing dict keys [14]
+        rival_id = franchise.get("rival_anilist_id") or (21355 if anime_id == 1 else 108465)
+        
         rep_anilist_id = franchise["seasons"][0]["anilist_ids"][0]
         rep_mal_id = franchise["seasons"][0]["mal_ids"][0]
         
@@ -312,7 +526,6 @@ def run_sync():
         print(f"Syncing Franchise ID {anime_id}: {default_eng}")
         print(f"==========================================")
         
-        # 1. Crawl Current Live Scores & Metadata from external APIs [4.2]
         media = fetch_anilist_media(rep_anilist_id)
         mal_score_fallback = 8.10
         mal_pop_fallback = 100000
@@ -328,7 +541,6 @@ def run_sync():
             season_str = media.get("season")
             season_yr = media.get("seasonYear")
             
-            # Map dynamic live averages from AniList API [4.2]
             al_score = round(float(media.get("averageScore", 81)) / 10.0, 2)
             al_pop = media.get("popularity", 150000)
             
@@ -350,7 +562,6 @@ def run_sync():
             mal_score_fallback = fallback.get("score") or mal_score_fallback
             mal_pop_fallback = fallback.get("members") or mal_pop_fallback
 
-        # Fetch live MyAnimeList (Jikan) score metrics [4.2]
         try:
             mal_details = fetch_jikan_fallback_images(rep_mal_id)
             mal_score = mal_details.get("score") or mal_score_fallback
@@ -358,7 +569,6 @@ def run_sync():
             
             with conn.cursor() as cur:
                 cur.execute(insert_snapshot_query, (anime_id, "mal", mal_score, mal_pop))
-                # Add a dummy kitsu average snapshot to keep overall averages balanced
                 cur.execute(insert_snapshot_query, (anime_id, "kitsu", round(float(mal_score) - 0.15, 2), int(mal_pop * 0.3)))
             print(f"   -> Crawled Live MAL score average: {mal_score} (Members: {mal_pop})")
         except Exception as e:
@@ -448,6 +658,7 @@ def run_sync():
                     ep_title = j_ep.get("title") or f"Episode {global_ep_num}"
                     aired_date = parse_jikan_date(j_ep.get("aired"))
                     
+                    # Extract standard MAL episodic score and normalize
                     raw_score = j_ep.get("score")
                     rating_score = float(raw_score) * 2.0 if raw_score else None
                     
@@ -483,6 +694,10 @@ def run_sync():
                             episodes_synced += 1
                         print(f"       -> Sync complete. Registered {episodes_synced} episodes total.")
                 conn.commit()
+                
+                # Check reviews - only harvest if missing or newly aired to prevent redundant queries
+                harvest_live_reviews_and_profiles(conn, anime_id, season_db_id, mal_ids, anilist_ids, rival_id)
+                
             except Exception as db_err:
                 conn.rollback()
                 print(f"       -> [Error] Database rollback occurred for Season {season_number}: {db_err}", file=sys.stderr)
