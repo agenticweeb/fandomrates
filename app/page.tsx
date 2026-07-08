@@ -4,7 +4,7 @@ import { Battle, AnomalyEvent, ScoreSnapshot } from '@/types';
 import Link from 'next/link';
 import DataFreshnessBadge from '@/components/DataFreshnessBadge';
 
-export const revalidate = 3600;
+export const dynamic = 'force-dynamic';
 
 async function getDashboardData() {
   const { data: battles } = await supabase
@@ -51,7 +51,7 @@ export default async function DashboardPage() {
         
         <div className="max-w-3xl space-y-4">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-accent-gold/10 text-accent-gold border border-accent-gold/20">
-            ✦ Anime Integrity Index
+            ✦ Anime Rating Integrity Index
           </div>
           <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-text-primary leading-tight">
             The Truth Behind <br/>
@@ -88,7 +88,7 @@ export default async function DashboardPage() {
             return (
               <div 
                 key={battle.id}
-                className="group relative border border-border rounded-2xl bg-surface overflow-hidden hover:border-text-secondary/20 transition-all duration-300"
+                className="group relative border border-border rounded-2xl bg-surface overflow-hidden hover:border-text-secondary/20 transition-all duration-300 animate-fade-in"
               >
                 <div className="absolute top-0 left-0 w-2 h-full bg-accent-mushoku"></div>
                 
@@ -163,7 +163,7 @@ export default async function DashboardPage() {
         <div className="border border-border rounded-2xl bg-surface divide-y divide-border">
           {anomalies.length > 0 ? (
             anomalies.map((anomaly) => (
-              <div key={anomaly.id} className="p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div key={anomaly.id} className="p-5 flex items-center justify-between gap-4">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider ${

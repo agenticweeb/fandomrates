@@ -15,6 +15,51 @@ export interface Anime {
   created_at: string;
 }
 
+export interface Season {
+  id: number;
+  anime_id: number;
+  season_number: number;
+  anilist_id: number | null;
+  mal_id: number | null;
+  title: string | null;
+  title_english: string | null;
+  title_romaji: string | null;
+  episode_count: number | null;
+  start_date: string | null;
+  end_date: string | null;
+  cover_image_url: string | null;
+  banner_image_url: string | null;
+  created_at: string;
+}
+
+export interface Episode {
+  id: number;
+  season_id: number;
+  anime_id: number;
+  episode_number: number;
+  episode_title: string | null;
+  aired_date: string | null;
+  thumbnail_url: string | null;
+  created_at: string;
+}
+
+export interface Review {
+  id: number;
+  anime_id: number;
+  season_id: number | null;
+  episode_id: number | null;
+  platform: string;
+  username: string | null;
+  display_id: string | null;
+  score: number | null;
+  review_text: string | null;
+  review_date: string | null;
+  helpful_count: number | null;
+  category: 'bomber' | 'inflator' | 'genuine' | 'unknown';
+  evidence: Record<string, any> | null;
+  created_at: string;
+}
+
 export interface ScoreSnapshot {
   id: number;
   anime_id: number;
@@ -33,6 +78,9 @@ export interface EpisodeScore {
   air_date: string | null;
   score: number | null;
   scraped_at: string;
+  season_number: number | null;
+  season_id: number | null;
+  episode_id: number | null;
 }
 
 export interface AnomalyEvent {

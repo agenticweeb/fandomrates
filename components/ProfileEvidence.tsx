@@ -5,9 +5,10 @@ import { SuspiciousProfile } from '@/types';
 
 interface ProfileEvidenceProps {
   profiles: SuspiciousProfile[];
+  animeMap: { [key: number]: { title: string; colorClass: string; borderClass: string } };
 }
 
-export default function ProfileEvidence({ profiles }: ProfileEvidenceProps) {
+export default function ProfileEvidence({ profiles, animeMap }: ProfileEvidenceProps) {
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
   if (!profiles || profiles.length === 0) {
@@ -32,22 +33,35 @@ export default function ProfileEvidence({ profiles }: ProfileEvidenceProps) {
           <thead>
             <tr className="bg-surface-elevated/50 text-xs font-bold uppercase tracking-wider text-text-secondary border-b border-border">
               <th className="p-4">Anonymized Identifier</th>
+              <th className="p-4">Target Show</th>
               <th className="p-4">Platform</th>
-              <th className="p-4">Rating</th>
+              <th className="p-4">Rating Given</th>
               <th className="p-4">Classification</th>
               <th className="p-4 text-right">Inspection</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60 text-sm">
             {profiles.map((profile) => {
-              const badge = categoryLabels[profile.category] || categoryLabels.unknown;
+              const badge = categoryLabels[profile.category ?? 'unknown'] || categoryLabels.unknown;
               const isExpanded = expandedId === profile.id;
+              
+              // Resolve mapped target show metadata
+              const targetAnime = animeMap[profile.anime_id] || { 
+                title: 'Unknown Title', 
+                colorClass: 'text-text-secondary bg-surface', 
+                borderClass: 'border-border' 
+              };
 
               return (
                 <React.Fragment key={profile.id}>
                   <tr className="hover:bg-surface-elevated/20 transition-colors">
                     <td className="p-4 font-mono font-medium text-text-primary">
                       {profile.display_id || 'user_anon'}
+                    </td>
+                    <td className="p-4">
+                      <span className={`inline-flex px-2.5 py-0.5 text-xs font-semibold rounded border ${targetAnime.colorClass} ${targetAnime.borderClass}`}>
+                        {targetAnime.title}
+                      </span>
                     </td>
                     <td className="p-4 text-xs uppercase font-bold tracking-wider text-text-secondary">
                       {profile.platform}
@@ -74,7 +88,7 @@ export default function ProfileEvidence({ profiles }: ProfileEvidenceProps) {
 
                   {isExpanded && (
                     <tr className="bg-background/40">
-                      <td colSpan={5} className="p-6 border-b border-border">
+                      <td colSpan={6} className="p-6 border-b border-border">
                         <div className="bg-[#050508] border border-border/80 rounded-lg p-4 font-mono text-xs text-text-secondary overflow-x-auto max-w-4xl mx-auto">
                           <p className="text-text-primary mb-2 font-semibold">// Audit Trail Evidence Payload</p>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 text-text-secondary border-b border-border/50 pb-4">
