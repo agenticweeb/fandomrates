@@ -62,7 +62,7 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
       }
     });
 
-    const currentAvg = totalLatestCount > 0 ? totalLatestSum / totalLatestCount : (animeId === 1 ? 8.31 : 8.12);
+    const currentAvg = totalLatestCount > 0 ? totalLatestSum / totalLatestCount : (animeId === 1 ? 8.20 : 8.10);
     const prevAvg = totalPrevCount > 0 ? totalPrevSum / totalPrevCount : currentAvg;
     const delta = currentAvg - prevAvg;
 
@@ -76,13 +76,12 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
       animate="show"
       className="space-y-12"
     >
-      {/* Cinematic Fan-Native Hero */}
+      {/* Cinematic Neutral Hero */}
       <motion.section 
         variants={itemVariants}
-        className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-surface to-background border border-border p-8 md:p-14 shadow-2xl"
+        className="relative overflow-hidden rounded-3xl bg-surface border border-border p-8 md:p-14 shadow-2xl"
       >
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(124,58,237,0.1),transparent_40%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,rgba(220,38,38,0.05),transparent_40%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.02),transparent_50%)]" />
         
         <div className="max-w-4xl space-y-6 relative z-10">
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest bg-accent-gold/10 text-accent-gold border border-accent-gold/20">
@@ -90,7 +89,7 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
           </span>
           <h1 className="text-4xl md:text-6xl font-black text-text-primary tracking-tight leading-tight uppercase">
             The Scores Don't Lie. <br/>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent-cyan via-accent-mushoku to-accent-rezero">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent-cyan to-text-primary">
               But the Voters Might.
             </span>
           </h1>
@@ -102,7 +101,7 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
 
       {/* Active Battle Cards */}
       <section className="space-y-6">
-        <h2 className="text-2xl font-black uppercase tracking-wider text-text-primary">Active Arena</h2>
+        <h2 className="text-2xl font-black uppercase tracking-wider text-text-primary">Tracked Campaigns</h2>
 
         <div className="grid grid-cols-1 gap-8">
           {battles.map((battle) => {
@@ -117,62 +116,60 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
               <motion.div 
                 key={battle.id}
                 variants={itemVariants}
-                whileHover={{ scale: 1.01 }}
                 className="group relative border border-border rounded-2xl bg-surface overflow-hidden shadow-2xl hover:border-text-secondary/25 transition-all duration-300"
               >
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-accent-mushoku via-accent-gold to-accent-rezero" />
+                {/* Clean Neutral Top Border line instead of heavy split gradients */}
+                <div className="absolute top-0 left-0 w-full h-1 bg-border/60" />
                 
                 <div className="p-6 md:p-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative overflow-hidden">
-                  <div className="absolute -right-32 top-0 w-96 h-96 bg-accent-rezero/5 rounded-full blur-3xl pointer-events-none" />
-                  <div className="absolute -left-32 bottom-0 w-96 h-96 bg-accent-mushoku/5 rounded-full blur-3xl pointer-events-none" />
+                  <div className="absolute -right-32 top-0 w-96 h-96 bg-white/2 rounded-full blur-3xl pointer-events-none" />
 
-                  {/* Poster cover Challenger A */}
+                  {/* Mapped Tracker A */}
                   <div className="lg:col-span-5 flex flex-col sm:flex-row items-center gap-6 z-10">
-                    <div className="relative w-28 h-40 rounded-xl overflow-hidden shadow-2xl border border-border group-hover:shadow-accent-mushoku/10 transition-all duration-500 flex-shrink-0">
+                    <div className="relative w-28 h-40 rounded-xl overflow-hidden shadow-2xl border border-border group-hover:shadow-white/5 transition-all duration-500 flex-shrink-0">
                       <img 
                         src={animeA.cover_image_url || "/fallback.jpg"} 
-                        alt={animeA.title_english || "Challenger A"} 
+                        alt={animeA.title_english || "Tracker A"} 
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
                     </div>
                     <div className="space-y-2 text-center sm:text-left">
-                      <span className="text-[9px] font-black uppercase bg-accent-mushoku/20 text-accent-mushoku px-2.5 py-0.5 rounded border border-accent-mushoku/30">
-                        The Contender
+                      <span className="text-[9px] font-black uppercase bg-surface-elevated text-text-secondary px-2.5 py-0.5 rounded border border-border">
+                        Tracked Series
                       </span>
-                      <h3 className="font-extrabold text-xl text-text-primary group-hover:text-accent-cyan transition-colors">{animeA.title_english}</h3>
+                      <h3 className="font-extrabold text-xl text-text-primary transition-colors">{animeA.title_english}</h3>
                       <div className="flex flex-wrap gap-4 justify-center sm:justify-start font-mono font-black text-sm pt-2">
                         <div className="text-center sm:text-left">
                           <span className="text-[10px] text-text-secondary block font-bold uppercase tracking-widest">Platform Average</span>
-                          <span className="text-xl text-accent-cyan">AL: {statsA.currentAvg.toFixed(2)} (flat)</span>
+                          <span className="text-xl text-accent-cyan">AL Live Score: {statsA.currentAvg.toFixed(2)} (flat)</span>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Central VS Divider */}
+                  {/* Clean Vertical Divider representing a side-by-side telemetry check (no VS logo) */}
                   <div className="lg:col-span-2 flex flex-col items-center justify-center text-center z-10">
-                    <span className="text-xs font-black text-accent-gold tracking-widest uppercase mb-1">vs</span>
-                    <div className="h-0.5 w-16 bg-gradient-to-r from-accent-mushoku via-accent-gold to-accent-rezero rounded" />
+                    <div className="h-10 w-px bg-border/60 rounded" />
                   </div>
 
-                  {/* Poster cover Challenger B */}
+                  {/* Mapped Tracker B */}
                   <div className="lg:col-span-5 flex flex-col sm:flex-row-reverse items-center gap-6 z-10 text-center sm:text-right">
-                    <div className="relative w-28 h-40 rounded-xl overflow-hidden shadow-2xl border border-border group-hover:shadow-accent-rezero/10 transition-all duration-500 flex-shrink-0">
+                    <div className="relative w-28 h-40 rounded-xl overflow-hidden shadow-2xl border border-border group-hover:shadow-white/5 transition-all duration-500 flex-shrink-0">
                       <img 
                         src={animeB.cover_image_url || "/fallback.jpg"} 
-                        alt={animeB.title_english || "Challenger B"} 
+                        alt={animeB.title_english || "Tracker B"} 
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
                     </div>
                     <div className="space-y-2 text-center sm:text-right">
-                      <span className="text-[9px] font-black uppercase bg-accent-rezero/20 text-accent-rezero px-2.5 py-0.5 rounded border border-accent-rezero/30">
-                        The Rival
+                      <span className="text-[9px] font-black uppercase bg-surface-elevated text-text-secondary px-2.5 py-0.5 rounded border border-border">
+                        Tracked Series
                       </span>
-                      <h3 className="font-extrabold text-xl text-text-primary group-hover:text-accent-cyan transition-colors">{animeB.title_english}</h3>
+                      <h3 className="font-extrabold text-xl text-text-primary transition-colors">{animeB.title_english}</h3>
                       <div className="flex flex-wrap gap-4 justify-center sm:justify-end font-mono font-black text-sm pt-2">
                         <div>
                           <span className="text-[10px] text-text-secondary block font-bold uppercase tracking-widest">Platform Average</span>
-                          <span className="text-xl text-accent-cyan">AL: {statsB.currentAvg.toFixed(2)} (flat)</span>
+                          <span className="text-xl text-accent-cyan">AL Live Score: {statsB.currentAvg.toFixed(2)} (flat)</span>
                         </div>
                       </div>
                     </div>
@@ -190,7 +187,7 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
                     href={`/battle/${battle.slug}`} 
                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-black text-background bg-text-primary hover:bg-text-primary/95 transition-all text-center justify-center uppercase tracking-wider"
                   >
-                    View the War Room ⚔️
+                    View the War Room ⚔品
                   </Link>
                 </div>
               </motion.div>
@@ -209,7 +206,7 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest ${
-                      anomaly.event_type === 'drop' ? 'bg-danger/10 text-danger border border-danger/25' : 'bg-success/10 text-success border border-success/25'
+                      anomaly.event_type === 'drop' ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'
                     }`}>
                       {anomaly.event_type} Flagged
                     </span>

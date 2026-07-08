@@ -34,7 +34,6 @@ async function getBattleData(slug: string) {
   const idA = battle.anime_a_id;
   const idB = battle.anime_b_id;
 
-  // 1. Fetch seasons
   const { data: seasons } = await supabase
     .from('seasons')
     .select('*')
@@ -44,7 +43,6 @@ async function getBattleData(slug: string) {
   const seasonsA = seasons?.filter(s => s.anime_id === idA) || [];
   const seasonsB = seasons?.filter(s => s.anime_id === idB) || [];
 
-  // 2. Fetch episodes with thumbnails
   const { data: episodes } = await supabase
     .from('episodes')
     .select('*')
@@ -53,7 +51,6 @@ async function getBattleData(slug: string) {
   const epsDataA = episodes?.filter(e => e.anime_id === idA) || [];
   const epsDataB = episodes?.filter(e => e.anime_id === idB) || [];
 
-  // 3. Fetch reviews mapped to episodes
   const { data: reviews } = await supabase
     .from('reviews')
     .select('*')
@@ -62,7 +59,6 @@ async function getBattleData(slug: string) {
 
   const reviewsList = reviews || [];
 
-  // 4. Fetch platform snapshot timelines
   const { data: snapshots } = await supabase
     .from('score_snapshots')
     .select('*')
@@ -71,14 +67,12 @@ async function getBattleData(slug: string) {
 
   const snapData = snapshots || [];
 
-  // 5. Fetch suspicious accounts
   const { data: suspicious } = await supabase
     .from('suspicious_profiles')
     .select('*')
     .in('anime_id', [idA, idB])
     .order('found_at', { ascending: false }) as { data: SuspiciousProfile[] | null };
 
-  // 6. Fetch detected score anomalies
   const { data: anomalies } = await supabase
     .from('anomaly_events')
     .select('*')
@@ -131,8 +125,8 @@ export default async function BattlePage({ params }: BattlePageProps) {
   if (!battle) {
     return (
       <div className="py-24 text-center space-y-4">
-        <h1 className="text-2xl font-bold text-text-primary">Comparison Battle Not Found</h1>
-        <p className="text-text-secondary">The comparison matrix specified is either private or does not exist.</p>
+        <h1 className="text-2xl font-bold text-text-primary">Comparison Block Not Found</h1>
+        <p className="text-text-secondary">The specified tracking scope is unavailable.</p>
         <Link href="/" className="text-accent-cyan hover:underline inline-block mt-4">Return Home</Link>
       </div>
     );
@@ -141,19 +135,19 @@ export default async function BattlePage({ params }: BattlePageProps) {
   const animeA = battle.anime_a!;
   const animeB = battle.anime_b!;
 
-  const activeBannerA = seasonsA.find(s => s.season_number === 3)?.banner_image_url || animeA.banner_image_url || '/images/mushoku-banner.jpg';
-  const activeBannerB = seasonsB.find(s => s.season_number === 4)?.banner_image_url || animeB.banner_image_url || '/images/rezero-banner.jpg';
+  const activeBannerA = '/images/mushoku-banner.jpg';
+  const activeBannerB = '/images/rezero-banner.jpg';
 
   const animeMap = {
     [animeA.id]: {
-      title: animeA.title_english || 'Challenger A',
-      colorClass: 'text-accent-mushoku bg-accent-mushoku/10',
-      borderClass: 'border-accent-mushoku/20'
+      title: animeA.title_english || 'Tracker A',
+      colorClass: 'text-text-primary bg-surface-elevated',
+      borderClass: 'border-border'
     },
     [animeB.id]: {
-      title: animeB.title_english || 'Challenger B',
-      colorClass: 'text-accent-rezero bg-accent-rezero/10',
-      borderClass: 'border-accent-rezero/20'
+      title: animeB.title_english || 'Tracker B',
+      colorClass: 'text-text-primary bg-surface-elevated',
+      borderClass: 'border-border'
     }
   };
 
@@ -167,66 +161,55 @@ export default async function BattlePage({ params }: BattlePageProps) {
 
   return (
     <div className="space-y-16">
-      {/* Banner Hero */}
+      
+      {/* Side-by-Side Neutral Split Headers */}
       <section className="relative overflow-hidden rounded-3xl border border-border bg-surface flex flex-col md:flex-row min-h-[380px]">
-        {/* Anime A (Left Half) */}
-        <div className="flex-1 p-8 md:p-12 flex flex-col justify-between relative overflow-hidden group min-h-[250px]">
+        {/* Left Segment */}
+        <div className="flex-1 p-8 md:p-12 flex flex-col justify-between relative overflow-hidden min-h-[250px] border-b md:border-b-0 md:border-r border-border">
           <div 
-            className="absolute inset-0 bg-cover bg-center opacity-30 group-hover:opacity-40 transition-opacity duration-500"
-            style={{ backgroundImage: `url('${activeBannerA}')` }}
+            className="absolute inset-0 bg-cover bg-center opacity-20"
+            style={{ backgroundImage: "url('/images/mushoku-banner.jpg')" }}
           ></div>
           <div className="absolute inset-0 bg-gradient-to-r from-background via-background/80 to-transparent"></div>
           
           <div className="z-10 space-y-4">
-            <span className="inline-flex px-3 py-1 rounded text-xs font-extrabold uppercase tracking-widest bg-accent-mushoku/20 text-accent-mushoku border border-accent-mushoku/30 backdrop-blur-sm">
-              Challenger A
+            <span className="inline-flex px-3 py-1 rounded text-xs font-black uppercase tracking-widest bg-surface-elevated border border-border">
+              Tracked campaign A
             </span>
-            <h1 className="text-3xl md:text-4xl font-extrabold text-text-primary drop-shadow-md">{animeA.title_english}</h1>
+            <h1 className="text-3xl md:text-4xl font-black text-text-primary drop-shadow-md">{animeA.title_english}</h1>
             <p className="text-xs font-mono text-text-secondary">{animeA.title_romaji}</p>
-            <p className="text-sm text-text-secondary max-w-md line-clamp-3">{animeA.synopsis}</p>
+            <p className="text-sm text-text-secondary max-w-md line-clamp-3 leading-relaxed">{animeA.synopsis}</p>
           </div>
         </div>
 
-        {/* Central VS Divider */}
-        <div className="flex items-center justify-center relative md:absolute md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-25 py-4 md:py-0">
+        {/* Right Segment */}
+        <div className="flex-1 p-8 md:p-12 flex flex-col justify-between items-start md:items-end text-left md:text-right relative overflow-hidden min-h-[250px]">
           <div 
-            className="w-16 h-16 bg-cover bg-center border-2 border-border text-accent-gold rounded-full flex items-center justify-center font-extrabold text-sm tracking-widest shadow-2xl backdrop-blur-md"
-            style={{ backgroundImage: "url('/images/vs-divider.png')", backgroundColor: "#0a0a0f" }}
-          >
-            VS
-          </div>
-        </div>
-
-        {/* Anime B (Right Half) */}
-        <div className="flex-1 p-8 md:p-12 flex flex-col justify-between items-start md:items-end text-left md:text-right relative overflow-hidden group border-t md:border-t-0 md:border-l border-border min-h-[250px]">
-          <div 
-            className="absolute inset-0 bg-cover bg-center opacity-30 group-hover:opacity-40 transition-opacity duration-500"
-            style={{ backgroundImage: `url('${activeBannerB}')` }}
+            className="absolute inset-0 bg-cover bg-center opacity-20"
+            style={{ backgroundImage: "url('/images/rezero-banner.jpg')" }}
           ></div>
           <div className="absolute inset-0 bg-gradient-to-l from-background via-background/80 to-transparent"></div>
 
           <div className="z-10 space-y-4">
-            <span className="inline-flex px-3 py-1 rounded text-xs font-extrabold uppercase tracking-widest bg-accent-rezero/20 text-accent-rezero border border-accent-rezero/30 backdrop-blur-sm">
-              Challenger B
+            <span className="inline-flex px-3 py-1 rounded text-xs font-black uppercase tracking-widest bg-surface-elevated border border-border">
+              Tracked campaign B
             </span>
-            <h2 className="text-3xl md:text-4xl font-extrabold text-text-primary drop-shadow-md">{animeB.title_english}</h2>
+            <h2 className="text-3xl md:text-4xl font-black text-text-primary drop-shadow-md">{animeB.title_english}</h2>
             <p className="text-xs font-mono text-text-secondary">{animeB.title_romaji}</p>
-            <p className="text-sm text-text-secondary max-w-md line-clamp-3 md:ml-auto">{animeB.synopsis}</p>
+            <p className="text-sm text-text-secondary max-w-md line-clamp-3 md:ml-auto leading-relaxed">{animeB.synopsis}</p>
           </div>
         </div>
       </section>
 
-      {/* Dynamic U-Curve selectors */}
+      {/* Switchable Rating Distribution U-Curves */}
       <section className="space-y-6">
         <div>
-          <h3 className="text-2xl font-bold tracking-tight text-text-primary">Coordinated Rating Discrepancies</h3>
-          <p className="text-sm text-text-secondary mt-1">
-            Choose filters to inspect curves dynamically. Exposes the exact distribution of 1s (coordinated bombs) and 10s (inflations).
-          </p>
+          <h3 className="text-2xl font-black uppercase tracking-wider text-text-primary">Analytical Score Distribution</h3>
+          <p className="text-sm text-text-secondary mt-1">Exposes the exact distribution of 1s (coordinated low-rating signatures) and 10s (coordinated high-rating signatures).</p>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <RatingDistributionChart 
-            title={`${animeA.title_english} Curve Analysis`} 
+            title={`${animeA.title_english} Distribution`} 
             accentColor="#7c3aed" 
             seasons={seasonsA}
             episodes={epsDataA}
@@ -234,7 +217,7 @@ export default async function BattlePage({ params }: BattlePageProps) {
             fallbackOverall={mushokuFallbackCurve}
           />
           <RatingDistributionChart 
-            title={`${animeB.title_english} Curve Analysis`} 
+            title={`${animeB.title_english} Distribution`} 
             accentColor="#dc2626" 
             seasons={seasonsB}
             episodes={epsDataB}
@@ -244,10 +227,10 @@ export default async function BattlePage({ params }: BattlePageProps) {
         </div>
       </section>
 
-      {/* Legacy scoring charts */}
+      {/* Historical Scoring Charts */}
       <section className="space-y-6">
         <div>
-          <h3 className="text-2xl font-bold tracking-tight text-text-primary">Platform Scoring History</h3>
+          <h3 className="text-2xl font-black uppercase tracking-wider text-text-primary">Platform Scoring History</h3>
           <p className="text-sm text-text-secondary mt-1">Comparing tracking fluctuations and divergence indices over time.</p>
         </div>
         <ScoreChart
@@ -272,7 +255,7 @@ export default async function BattlePage({ params }: BattlePageProps) {
       <section className="space-y-12">
         <div className="space-y-6">
           <div>
-            <h3 className="text-2xl font-bold tracking-tight text-text-primary">{animeA.title_english} Episode Milestones</h3>
+            <h3 className="text-2xl font-black uppercase tracking-wider text-text-primary">{animeA.title_english} Episode Milestones</h3>
             <p className="text-sm text-text-secondary mt-1">Select season poster card to inspect schedule metrics.</p>
           </div>
           <EpisodeGrid
@@ -286,7 +269,7 @@ export default async function BattlePage({ params }: BattlePageProps) {
 
         <div className="space-y-6">
           <div>
-            <h3 className="text-2xl font-bold tracking-tight text-text-primary">{animeB.title_english} Episode Milestones</h3>
+            <h3 className="text-2xl font-black uppercase tracking-wider text-text-primary">{animeB.title_english} Episode Milestones</h3>
             <p className="text-sm text-text-secondary mt-1">Select season poster card to inspect schedule metrics.</p>
           </div>
           <EpisodeGrid
@@ -302,24 +285,24 @@ export default async function BattlePage({ params }: BattlePageProps) {
       {/* Platform Factions comparisons */}
       <section className="space-y-6">
         <div>
-          <h3 className="text-2xl font-bold tracking-tight text-text-primary">Platform Battlegrounds Audit</h3>
+          <h3 className="text-2xl font-black uppercase tracking-wider text-text-primary">Platform Battlegrounds Audit</h3>
           <p className="text-sm text-text-secondary mt-1">
-            Analyzing whether MyAnimeList (MAL) or AniList is home to the most intense glazers (10/10) or toxic bombers (1-2/10) [14].
+            Analyzing whether MyAnimeList (MAL) or AniList is home to the most intense coordinated high-rating (10/10) or coordinated low-rating (1-2/10) signatures.
           </p>
         </div>
         <PlatformBattlegrounds 
           profiles={suspicious} 
           animeA_id={animeA.id} 
           animeB_id={animeB.id} 
-          animeA_title={animeA.title_english || 'Challenger A'} 
-          animeB_title={animeB.title_english || 'Challenger B'} 
+          animeA_title={animeA.title_english || 'Tracker A'} 
+          animeB_title={animeB.title_english || 'Tracker B'} 
         />
       </section>
 
       {/* Audit table logs */}
       <section className="space-y-6">
         <div>
-          <h3 className="text-2xl font-bold tracking-tight text-text-primary">Coordinated Activity Audit Logs</h3>
+          <h3 className="text-2xl font-black uppercase tracking-wider text-text-primary">Coordinated Activity Audit Logs</h3>
           <p className="text-sm text-text-secondary mt-1">
             Anonymized user logs displaying target shows and behavioral patterns [1].
           </p>
