@@ -31,7 +31,6 @@ export default function ProfileEvidence({ profiles, animeMap }: ProfileEvidenceP
 
   const totalPages = Math.ceil(filteredProfiles.length / rowsPerPage);
 
-  // Irreverent, fan-native definitions
   const categoryLabels: { [key: string]: { label: string; style: string } } = {
     rival_fandom: { label: 'Rival Fan Hit', style: 'bg-danger/10 text-danger border-danger/30' },
     burner: { label: 'Fresh Account', style: 'bg-accent-gold/10 text-accent-gold border-accent-gold/30' },
@@ -67,8 +66,8 @@ export default function ProfileEvidence({ profiles, animeMap }: ProfileEvidenceP
         </div>
       </div>
 
-      {/* Main Table view */}
-      <div className="border border-border rounded-xl bg-surface overflow-hidden">
+      {/* 1. Desktop & Tablet Mode (Table) */}
+      <div className="hidden md:block border border-border rounded-xl bg-surface overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -126,91 +125,164 @@ export default function ProfileEvidence({ profiles, animeMap }: ProfileEvidenceP
                         </td>
                       </tr>
 
-                      {/* Animated expandable proof payload */}
-                      <AnimatePresence>
-                        {isExpanded && (
-                          <tr className="bg-background/40">
-                            <td colSpan={6} className="p-0 border-b border-border">
-                              <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                transition={{ duration: 0.2 }}
-                                className="overflow-hidden p-6"
-                              >
-                                <div className="bg-[#050508] border border-border/80 rounded-xl p-5 font-mono text-xs text-text-secondary overflow-x-auto max-w-4xl mx-auto">
-                                  <p className="text-accent-gold mb-3 font-black">// AUDIT TRAIL LOG EVIDENCE PAYLOAD</p>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 text-text-secondary border-b border-border/50 pb-4">
-                                    <div>
-                                      <span className="text-text-primary font-bold">Account Age:</span> {profile.evidence?.account_age_days ? `${Math.round(profile.evidence.account_age_days)} days` : 'N/A'}
-                                    </div>
-                                    <div>
-                                      <span className="text-text-primary font-bold">Library List Size:</span> {profile.evidence?.list_count ?? 'N/A'} entries
-                                    </div>
-                                    <div>
-                                      <span className="text-text-primary font-bold">Mean Given Score:</span> {profile.evidence?.mean_score ?? 'N/A'} / 10
-                                    </div>
-                                    <div>
-                                      <span className="text-text-primary font-bold">Platform Flagged ID:</span> {profile.platform_user_id || 'Hidden'}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <span className="text-text-primary font-bold">// Public Favorites Shelf Preview:</span>
-                                    {profile.evidence?.favorites && profile.evidence.favorites.length > 0 ? (
-                                      <ul className="list-disc pl-5 mt-2 space-y-1 text-text-secondary">
-                                        {profile.evidence.favorites.map((fav: string, i: number) => (
-                                          <li key={i}>{fav}</li>
-                                        ))}
-                                      </ul>
-                                    ) : (
-                                      <p className="italic text-text-secondary mt-1">Favorites shelf set to private or empty.</p>
-                                    )}
-                                  </div>
+                      {/* Expandable JSON Evidence */}
+                      {isExpanded && (
+                        <tr className="bg-background/40">
+                          <td colSpan={6} className="p-6 border-b border-border">
+                            <div className="bg-[#050508] border border-border/80 rounded-xl p-5 font-mono text-xs text-text-secondary overflow-x-auto max-w-4xl mx-auto">
+                              <p className="text-accent-gold mb-3 font-black">// AUDIT TRAIL LOG EVIDENCE PAYLOAD</p>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 text-text-secondary border-b border-border/50 pb-4">
+                                <div>
+                                  <span className="text-text-primary font-bold">Account Age:</span> {profile.evidence?.account_age_days ? `${Math.round(profile.evidence.account_age_days)} days` : 'N/A'}
                                 </div>
-                              </motion.div>
-                            </td>
-                          </tr>
-                        )}
-                      </AnimatePresence>
+                                <div>
+                                  <span className="text-text-primary font-bold">Library Size:</span> {profile.evidence?.list_count ?? 'N/A'} entries
+                                </div>
+                                <div>
+                                  <span className="text-text-primary font-bold">Mean Given Score:</span> {profile.evidence?.mean_score ?? 'N/A'} / 10
+                                </div>
+                                <div>
+                                  <span className="text-text-primary font-bold">Platform ID:</span> {profile.platform_user_id || 'Hidden'}
+                                </div>
+                              </div>
+                              <div>
+                                <span className="text-text-primary font-bold">// Public Favorites Shelf Preview:</span>
+                                {profile.evidence?.favorites && profile.evidence.favorites.length > 0 ? (
+                                  <ul className="list-disc pl-5 mt-2 space-y-1 text-text-secondary">
+                                    {profile.evidence.favorites.map((fav: string, i: number) => (
+                                      <li key={i}>{fav}</li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <p className="italic text-text-secondary mt-1">Favorites shelf set to private or empty.</p>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
                     </React.Fragment>
                   );
                 })
               ) : (
                 <tr>
                   <td colSpan={6} className="p-8 text-center text-xs text-text-secondary">
-                    No suspicious profiles flagged matching search criteria.
+                    No suspicious profiles flagged.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+      </div>
 
-        {/* Pagination controls */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-border bg-surface-elevated/40 p-4 text-xs font-bold text-text-secondary">
-            <span>
-              Showing Page {currentPage} of {totalPages}
-            </span>
-            <div className="flex gap-2">
-              <button
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                className="px-3 py-1.5 rounded border border-border bg-surface hover:bg-surface-elevated hover:text-text-primary disabled:opacity-50"
+      {/* 2. Adaptive Mobile Mode (Visual Stacked Cards) [7.5] */}
+      <div className="block md:hidden space-y-4">
+        {paginatedProfiles.length > 0 ? (
+          paginatedProfiles.map((profile) => {
+            const badge = categoryLabels[profile.category ?? 'unknown'] || categoryLabels.unknown;
+            const isExpanded = expandedId === profile.id;
+            const targetAnime = animeMap[profile.anime_id] || { 
+              title: 'Unknown Title', 
+              colorClass: 'text-text-secondary bg-surface', 
+              borderClass: 'border-border' 
+            };
+
+            return (
+              <div 
+                key={profile.id}
+                className="border border-border rounded-xl bg-surface p-4 space-y-3 shadow"
               >
-                Previous
-              </button>
-              <button
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                className="px-3 py-1.5 rounded border border-border bg-surface hover:bg-surface-elevated hover:text-text-primary disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
+                <div className="flex justify-between items-start">
+                  <div className="space-y-1">
+                    <span className="text-xs font-mono font-black text-text-primary block">
+                      {profile.display_id || 'user_anon'}
+                    </span>
+                    <span className={`inline-flex px-2 py-0.5 text-[10px] font-black rounded border ${targetAnime.colorClass} ${targetAnime.borderClass}`}>
+                      {targetAnime.title}
+                    </span>
+                  </div>
+                  <span className="text-xs font-mono font-black bg-background border border-border px-2 py-0.5 rounded">
+                    {profile.rating_given}/10
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-2 border-t border-border/40">
+                  <span className={`inline-flex px-2.5 py-0.5 text-[10px] font-extrabold rounded-full border ${badge.style}`}>
+                    {badge.label}
+                  </span>
+                  <button
+                    onClick={() => setExpandedId(isExpanded ? null : profile.id)}
+                    className="text-xs font-black text-accent-cyan hover:underline"
+                  >
+                    {isExpanded ? 'Hide Evidence' : 'Inspect Evidence'}
+                  </button>
+                </div>
+
+                {/* Expandable JSON block on mobile */}
+                <AnimatePresence>
+                  {isExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden pt-2"
+                    >
+                      <div className="bg-[#050508] border border-border/80 rounded-lg p-4 font-mono text-[11px] text-text-secondary space-y-3">
+                        <p className="text-accent-gold font-black border-b border-border/50 pb-1">// AUDIO LOG PROOF</p>
+                        <div className="space-y-1.5">
+                          <div><span className="text-text-primary font-bold">Age:</span> {profile.evidence?.account_age_days ? `${Math.round(profile.evidence.account_age_days)} days` : 'N/A'}</div>
+                          <div><span className="text-text-primary font-bold">List size:</span> {profile.evidence?.list_count ?? 'N/A'} completed</div>
+                          <div><span className="text-text-primary font-bold">Mean Score:</span> {profile.evidence?.mean_score ?? 'N/A'} / 10</div>
+                        </div>
+                        {profile.evidence?.favorites && profile.evidence.favorites.length > 0 && (
+                          <div className="pt-2 border-t border-border/50">
+                            <span className="text-text-primary font-bold">Favorites:</span>
+                            <ul className="list-disc pl-4 mt-1 space-y-0.5 text-[10px]">
+                              {profile.evidence.favorites.slice(0, 3).map((f: string, idx: number) => (
+                                <li key={idx}>{f}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })
+        ) : (
+          <div className="p-6 border border-border rounded-xl bg-surface text-center text-xs text-text-secondary">
+            No suspicious profiles flagged.
           </div>
         )}
       </div>
+
+      {/* Pagination controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between border-t border-border bg-surface-elevated/40 p-4 text-xs font-bold text-text-secondary">
+          <span>
+            Page {currentPage} of {totalPages}
+          </span>
+          <div className="flex gap-2">
+            <button
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              className="px-3 py-1.5 rounded border border-border bg-surface hover:bg-surface-elevated disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <button
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              className="px-3 py-1.5 rounded border border-border bg-surface hover:bg-surface-elevated disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
