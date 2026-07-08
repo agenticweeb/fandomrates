@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ==========================================
-# 1. DATABASE CONNECTION (ZERO SECRETS)
+# 1. SECURE DATABASE CONNECTION
 # ==========================================
 def get_db_connection():
     db_url = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")
@@ -29,6 +29,12 @@ def get_db_connection():
     db_name = os.environ.get("DB_NAME") or "postgres"
     db_port = os.environ.get("DB_PORT") or "5432"
     
+    print("==================================================")
+    print(f"[DB TARGET DEBUG]")
+    print(f"Host: {db_host}")
+    print(f"User Ref: {db_user.split('.')[1] if '.' in db_user else db_user}")
+    print("==================================================")
+    
     if not db_password:
         print("[Error] DB_PASSWORD is missing in local hidden .env configuration.", file=sys.stderr)
         sys.exit(1)
@@ -37,7 +43,7 @@ def get_db_connection():
         resolved_ip = socket.gethostbyname(db_host)
         db_host = resolved_ip
     except Exception as dns_err:
-         print(f"   [System Warning] DNS lookup failed for {db_host}: {dns_err}.")
+         print(f"   [System Warning] DNS lookup failed: {dns_err}.")
          
     return psycopg2.connect(
         host=db_host,
@@ -306,7 +312,7 @@ def run_sync():
         print(f"Syncing Franchise ID {anime_id}: {default_eng}")
         print(f"==========================================")
         
-        # 1. Crawl Current Live Scores & Metadata from external APIs
+        # 1. Crawl Current Live Scores & Metadata from external APIs [4.2]
         media = fetch_anilist_media(rep_anilist_id)
         mal_score_fallback = 8.10
         mal_pop_fallback = 100000
@@ -442,7 +448,6 @@ def run_sync():
                     ep_title = j_ep.get("title") or f"Episode {global_ep_num}"
                     aired_date = parse_jikan_date(j_ep.get("aired"))
                     
-                    # Extract standard MAL episodic score and normalize
                     raw_score = j_ep.get("score")
                     rating_score = float(raw_score) * 2.0 if raw_score else None
                     
