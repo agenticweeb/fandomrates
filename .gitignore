@@ -45,3 +45,4 @@ npm-debug.log*
 # Supabase
 supabase/.temp/
 .vercel
+PROJECT_CONTEXT.md
