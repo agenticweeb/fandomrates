@@ -5,9 +5,9 @@ import ScoreChart from '@/components/ScoreChart';
 import EpisodeGrid from '@/components/EpisodeGrid';
 import ProfileEvidence from '@/components/ProfileEvidence';
 import RatingDistributionChart from '@/components/RatingDistributionChart';
+import PlatformBattlegrounds from '@/components/PlatformBattlegrounds';
 import Link from 'next/link';
 
-// Forces Vercel to pull fresh, uncached real-time database scores on every request
 export const dynamic = 'force-dynamic';
 
 interface BattlePageProps {
@@ -34,7 +34,7 @@ async function getBattleData(slug: string) {
   const idA = battle.anime_a_id;
   const idB = battle.anime_b_id;
 
-  // 1. Fetch seasons with posters and banners
+  // 1. Fetch seasons
   const { data: seasons } = await supabase
     .from('seasons')
     .select('*')
@@ -141,9 +141,8 @@ export default async function BattlePage({ params }: BattlePageProps) {
   const animeA = battle.anime_a!;
   const animeB = battle.anime_b!;
 
-  // Force local visual banners to bypass external CDN blocks entirely
-  const activeBannerA = '/images/mushoku-banner.jpg';
-  const activeBannerB = '/images/rezero-banner.jpg';
+  const activeBannerA = seasonsA.find(s => s.season_number === 3)?.banner_image_url || animeA.banner_image_url || '/images/mushoku-banner.jpg';
+  const activeBannerB = seasonsB.find(s => s.season_number === 4)?.banner_image_url || animeB.banner_image_url || '/images/rezero-banner.jpg';
 
   const animeMap = {
     [animeA.id]: {
@@ -300,12 +299,29 @@ export default async function BattlePage({ params }: BattlePageProps) {
         </div>
       </section>
 
+      {/* Platform Factions comparisons */}
+      <section className="space-y-6">
+        <div>
+          <h3 className="text-2xl font-bold tracking-tight text-text-primary">Platform Battlegrounds Audit</h3>
+          <p className="text-sm text-text-secondary mt-1">
+            Analyzing whether MyAnimeList (MAL) or AniList is home to the most intense glazers (10/10) or toxic bombers (1-2/10) [14].
+          </p>
+        </div>
+        <PlatformBattlegrounds 
+          profiles={suspicious} 
+          animeA_id={animeA.id} 
+          animeB_id={animeB.id} 
+          animeA_title={animeA.title_english || 'Challenger A'} 
+          animeB_title={animeB.title_english || 'Challenger B'} 
+        />
+      </section>
+
       {/* Audit table logs */}
       <section className="space-y-6">
         <div>
           <h3 className="text-2xl font-bold tracking-tight text-text-primary">Coordinated Activity Audit Logs</h3>
           <p className="text-sm text-text-secondary mt-1">
-            Now displaying the **Target Show** being bombed or inflated to track exact faction activities [1].
+            Anonymized user logs displaying target shows and behavioral patterns [1].
           </p>
         </div>
         <ProfileEvidence profiles={suspicious} animeMap={animeMap} />
