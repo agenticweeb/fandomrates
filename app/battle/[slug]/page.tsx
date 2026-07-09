@@ -160,17 +160,29 @@ export default async function BattlePage({ params }: BattlePageProps) {
     { rating: '1', count: 980 }, { rating: '2', count: 145 }, { rating: '3', count: 80 }, { rating: '4', count: 65 }, { rating: '5', count: 110 }, { rating: '6', count: 280 }, { rating: '7', count: 810 }, { rating: '8', count: 1840 }, { rating: '9', count: 3650 }, { rating: '10', count: 5800 }
   ];
 
-  // Resolve dynamic live database popularity/fan metrics [4.1]
   const statsA_AL_pop = snapData.find(s => s.anime_id === animeA.id && s.platform === 'anilist')?.popularity || 437420;
   const statsA_MAL_pop = snapData.find(s => s.anime_id === animeA.id && s.platform === 'mal')?.popularity || 1595540;
   
   const statsB_AL_pop = snapData.find(s => s.anime_id === animeB.id && s.platform === 'anilist')?.popularity || 601809;
   const statsB_MAL_pop = snapData.find(s => s.anime_id === animeB.id && s.platform === 'mal')?.popularity || 2484599;
 
+  // Calculate dynamic 7-Day Activity stats
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  const recentReviews = reviewsList.filter(r => r.review_date ? new Date(r.review_date) >= sevenDaysAgo : false);
+  const recentA = recentReviews.filter(r => r.anime_id === animeA.id);
+  const recentB = recentReviews.filter(r => r.anime_id === animeB.id);
+
+  const bombersA = recentA.filter(r => r.category === 'bomber').length;
+  const inflatorsA = recentA.filter(r => r.category === 'inflator').length;
+  const bombersB = recentB.filter(r => r.category === 'bomber').length;
+  const inflatorsB = recentB.filter(r => r.category === 'inflator').length;
+
   return (
     <div className="space-y-16">
       
-      {/* Side-by-Side Neutral Split Headers */}
+      {/* Side-by-Side Split Headers */}
       <section className="relative overflow-hidden rounded-3xl border border-border bg-surface flex flex-col md:flex-row min-h-[380px]">
         <div className="flex-1 p-8 md:p-12 flex flex-col justify-between relative overflow-hidden min-h-[250px] border-b md:border-b-0 md:border-r border-border">
           <div 
@@ -271,6 +283,42 @@ export default async function BattlePage({ params }: BattlePageProps) {
           animeB_al_pop={statsB_AL_pop}
           animeB_mal_pop={statsB_MAL_pop}
         />
+      </section>
+
+      {/* Dynamic 7-Day Activity Pulse */}
+      <section className="space-y-6">
+        <div>
+          <h3 className="text-2xl font-black uppercase tracking-wider text-text-primary">Recent 7-Day Activity Pulse</h3>
+          <p className="text-sm text-text-secondary mt-1">Real-time indicators showing active user rating patterns registered this week.</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 font-mono text-xs text-text-secondary">
+          <div className="border border-border rounded-xl bg-surface p-5 space-y-4">
+            <h4 className="font-extrabold text-sm text-text-primary">{animeA.title_english}</h4>
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div className="p-3 bg-danger/10 border border-danger/25 rounded-lg text-danger">
+                <div>Low Rating</div>
+                <div className="text-lg font-black mt-1">{bombersA}</div>
+              </div>
+              <div className="p-3 bg-success/10 border border-success/25 rounded-lg text-success col-span-2">
+                <div>High Rating</div>
+                <div className="text-lg font-black mt-1">{inflatorsA}</div>
+              </div>
+            </div>
+          </div>
+          <div className="border border-border rounded-xl bg-surface p-5 space-y-4">
+            <h4 className="font-extrabold text-sm text-text-primary">{animeB.title_english}</h4>
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div className="p-3 bg-danger/10 border border-danger/25 rounded-lg text-danger">
+                <div>Low Rating</div>
+                <div className="text-lg font-black mt-1">{bombersB}</div>
+              </div>
+              <div className="p-3 bg-success/10 border border-success/25 rounded-lg text-success col-span-2">
+                <div>High Rating</div>
+                <div className="text-lg font-black mt-1">{inflatorsB}</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* Milestone Timelines */}

@@ -39,6 +39,7 @@ export default function SubmitEvidencePage() {
     }
 
     try {
+      // 1. Write the community submission directly to Supabase
       const { error: insertError } = await supabase
         .from('community_submissions')
         .insert({
@@ -49,6 +50,22 @@ export default function SubmitEvidencePage() {
         });
 
       if (insertError) throw insertError;
+
+      // 2. Dispatch a dynamic notification directly to your Discord Webhook [14]
+      const animeName = animeList.find(a => a.id.toString() === selectedAnimeId)?.title_english || 'Tracked Campaign';
+      try {
+        await fetch('/api/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            show: animeName,
+            platform: platform.toUpperCase(),
+            notes: notes.trim() || `Submitted profile links: ${profileUrl}`
+          })
+        });
+      } catch (discordErr) {
+         console.warn('Webhook delivery delayed:', discordErr);
+      }
 
       setSuccess(true);
       setProfileUrl('');
@@ -89,7 +106,7 @@ export default function SubmitEvidencePage() {
 
             {success && (
               <div className="p-4 rounded-lg bg-success/10 border border-success/20 text-xs text-success font-bold font-mono">
-                [SUCCESS] Submission successfully queued for validation.
+                [SUCCESS] Submission successfully queued for validation and dispatched to Discord!
               </div>
             )}
 

@@ -72,7 +72,7 @@ MAPPINGS = [
             {
                 "season_number": 2,
                 "anilist_ids": [146065, 166873],
-                "mal_ids": [51149, 55888]
+                "mal_ids": [51179, 55888]
             },
             {
                 "season_number": 3,
