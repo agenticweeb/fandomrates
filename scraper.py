@@ -216,7 +216,6 @@ def fetch_jikan_reviews_paginated(mal_id, page=1):
     return []
 
 def fetch_jikan_user_stats(username):
-    """Fetch complete stats of a user from MyAnimeList."""
     url = f"https://api.jikan.moe/v4/users/{username}/full"
     response = safe_requests_get(url)
     if response and response.status_code == 200:
@@ -322,7 +321,7 @@ def harvest_live_reviews_and_profiles(conn, anime_id, season_id, mal_ids, anilis
     primary_anilist_id = anilist_ids[0]
 
     try:
-        # A. Pull and Process paginated Jikan (MyAnimeList) reviews [4.3]
+        # A. Pull and Process paginated Jikan (MyAnimeList) reviews
         for page in range(1, 3):
             j_reviews = fetch_jikan_reviews_paginated(primary_mal_id, page)
             for rev in j_reviews:
@@ -346,7 +345,7 @@ def harvest_live_reviews_and_profiles(conn, anime_id, season_id, mal_ids, anilis
                         with conn.cursor() as cur:
                             cur.execute("SELECT id FROM reviews WHERE episode_id = %s AND username = %s;", (ep_id, username))
                             if cur.fetchone():
-                                continue # Already logged! Skip! [14]
+                                continue
 
                         category = 'genuine'
                         if score <= 2:
@@ -356,7 +355,7 @@ def harvest_live_reviews_and_profiles(conn, anime_id, season_id, mal_ids, anilis
 
                         disp_id = f"user_{username[:3].lower()}_{score}" if username else "user_anon"
 
-                        # Retrieve user profile from MAL natively to run heuristics
+                        # Retrieve user profile from MAL natively to run heuristics [6.4]
                         user_stats = fetch_jikan_user_stats(username)
                         favorites_list = []
                         list_count = 5
@@ -380,7 +379,6 @@ def harvest_live_reviews_and_profiles(conn, anime_id, season_id, mal_ids, anilis
                             "rating_given": score
                         }
 
-                        # Check if fresh account / burner [6.4]
                         classification = 'unknown'
                         if list_count < 2 and account_age_days < 30:
                             classification = 'burner'
@@ -472,7 +470,8 @@ def harvest_live_reviews_and_profiles(conn, anime_id, season_id, mal_ids, anilis
                             """, (anime_id, season_id, ep_id, username, disp_id, rating_10, rev.get("summary", "")[:200], rev_date.isoformat(), 'bomber' if rating_10 <= 2 else 'genuine'))
                             
                             if category != 'unknown' or rating_10 <= 2 or rating_10 >= 9:
-                                evidence_json = f'{{"favorites": {str(evidence["favorites"]).replace("'\''", "\\"")}, "list_count": {list_count}, "mean_score": {mean_score}, "account_age_days": {account_age_days}, "rating_given": {rating_10}}}'
+                                # Standard json.dumps to completely bypass escaping and nesting quoting syntax crashes [14]
+                                evidence_json = json.dumps(evidence)
                                 cur.execute("""
                                     INSERT INTO suspicious_profiles (anime_id, platform, username, platform_user_id, rating_given, category, display_id, evidence)
                                     VALUES (%s, 'anilist', %s, %s, %s, %s, %s, %s::jsonb)
@@ -549,9 +548,7 @@ def run_sync():
         anime_id = franchise["anime_id"]
         default_eng = franchise["title_english"]
         default_rom = franchise["title_romaji"]
-        
-        # Crash-proof fallback resolver [14]
-        rival_id = franchise.get("rival_anilist_id") or (21355 if anime_id == 1 else 108465)
+        rival_id = franchise["rival_anilist_id"]
         
         rep_anilist_id = franchise["seasons"][0]["anilist_ids"][0]
         rep_mal_id = franchise["seasons"][0]["mal_ids"][0]
@@ -663,7 +660,7 @@ def run_sync():
                             {"title": "Burn Bright, Mad Dog", "aired": "2026-07-05T00:00:00+00:00", "score": 4.15},
                             {"title": "Eris Begins Her Training", "aired": "2026-07-05T00:00:00+00:00", "score": 4.25}
                         ]
-                    elif anime_id == 2 and season_number == 4: # Re:Zero Season 4 (11 episodes)
+                    elif anime_id == 2 and season_number == 4: # Re:Zero Season 4
                         start_date = datetime(2026, 4, 8, tzinfo=timezone.utc)
                         ep_titles = [
                             "The Pleiades Watchtower", "The Sand Labyrinth", "The Trial of the Sage",
