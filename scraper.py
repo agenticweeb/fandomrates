@@ -215,6 +215,14 @@ def fetch_jikan_reviews_paginated(mal_id, page=1):
         return response.json().get("data", [])
     return []
 
+def fetch_jikan_user_stats(username):
+    """Fetch complete stats of a user from MyAnimeList."""
+    url = f"https://api.jikan.moe/v4/users/{username}/full"
+    response = safe_requests_get(url)
+    if response and response.status_code == 200:
+        return response.json().get("data", {})
+    return None
+
 def fetch_anilist_reviews(media_id, page=1):
     query = """
     query ($mediaId: Int, $page: Int) {
@@ -314,7 +322,7 @@ def harvest_live_reviews_and_profiles(conn, anime_id, season_id, mal_ids, anilis
     primary_anilist_id = anilist_ids[0]
 
     try:
-        # A. Pull and Process paginated Jikan (MyAnimeList) reviews
+        # A. Pull and Process paginated Jikan (MyAnimeList) reviews [4.3]
         for page in range(1, 3):
             j_reviews = fetch_jikan_reviews_paginated(primary_mal_id, page)
             for rev in j_reviews:
@@ -338,7 +346,7 @@ def harvest_live_reviews_and_profiles(conn, anime_id, season_id, mal_ids, anilis
                         with conn.cursor() as cur:
                             cur.execute("SELECT id FROM reviews WHERE episode_id = %s AND username = %s;", (ep_id, username))
                             if cur.fetchone():
-                                continue
+                                continue # Already logged! Skip! [14]
 
                         category = 'genuine'
                         if score <= 2:
@@ -348,6 +356,37 @@ def harvest_live_reviews_and_profiles(conn, anime_id, season_id, mal_ids, anilis
 
                         disp_id = f"user_{username[:3].lower()}_{score}" if username else "user_anon"
 
+                        # Retrieve user profile from MAL natively to run heuristics
+                        user_stats = fetch_jikan_user_stats(username)
+                        favorites_list = []
+                        list_count = 5
+                        mean_score = 7.0
+                        account_age_days = 180
+
+                        if user_stats:
+                            anime_stats = user_stats.get("statistics", {}).get("anime", {})
+                            list_count = anime_stats.get("completed", 5) + anime_stats.get("watching", 0)
+                            mean_score = anime_stats.get("mean_score", 7.0)
+                            joined_raw = user_stats.get("joined")
+                            if joined_raw:
+                                joined_dt = datetime.fromisoformat(joined_raw.replace('Z', '+00:00'))
+                                account_age_days = (datetime.now(timezone.utc) - joined_dt).days
+
+                        evidence = {
+                            "favorites": [],
+                            "list_count": list_count,
+                            "mean_score": mean_score,
+                            "account_age_days": account_age_days,
+                            "rating_given": score
+                        }
+
+                        # Check if fresh account / burner [6.4]
+                        classification = 'unknown'
+                        if list_count < 2 and account_age_days < 30:
+                            classification = 'burner'
+                        elif score >= 9 and list_count < 3:
+                            classification = 'inflation'
+
                         with conn.cursor() as cur:
                             cur.execute("""
                                 INSERT INTO reviews (anime_id, season_id, episode_id, platform, username, display_id, score, review_text, review_date, category)
@@ -355,18 +394,12 @@ def harvest_live_reviews_and_profiles(conn, anime_id, season_id, mal_ids, anilis
                                 ON CONFLICT DO NOTHING;
                             """, (anime_id, season_id, ep_id, username, disp_id, score, review_text, rev_date.isoformat(), category))
                             
-                            if category in ['bomber', 'inflator'] or score <= 2 or score >= 9:
-                                evidence_stub = {
-                                    "list_count": 4, 
-                                    "mean_score": float(score), 
-                                    "account_age_days": 45, 
-                                    "favorites": []
-                                }
+                            if classification != 'unknown' or score <= 2 or score >= 9:
                                 cur.execute("""
                                     INSERT INTO suspicious_profiles (anime_id, platform, username, platform_user_id, rating_given, category, display_id, evidence)
                                     VALUES (%s, 'mal', %s, %s, %s, %s, %s, %s::jsonb)
                                     ON CONFLICT DO NOTHING;
-                                """, (anime_id, username, username, score, 'burner' if score <= 2 else 'inflation', disp_id, json.dumps(evidence_stub)))
+                                """, (anime_id, username, username, score, classification, disp_id, json.dumps(evidence)))
                         conn.commit()
             delay_api(1.0)
 
@@ -439,11 +472,12 @@ def harvest_live_reviews_and_profiles(conn, anime_id, season_id, mal_ids, anilis
                             """, (anime_id, season_id, ep_id, username, disp_id, rating_10, rev.get("summary", "")[:200], rev_date.isoformat(), 'bomber' if rating_10 <= 2 else 'genuine'))
                             
                             if category != 'unknown' or rating_10 <= 2 or rating_10 >= 9:
+                                evidence_json = f'{{"favorites": {str(evidence["favorites"]).replace("'\''", "\\"")}, "list_count": {list_count}, "mean_score": {mean_score}, "account_age_days": {account_age_days}, "rating_given": {rating_10}}}'
                                 cur.execute("""
                                     INSERT INTO suspicious_profiles (anime_id, platform, username, platform_user_id, rating_given, category, display_id, evidence)
                                     VALUES (%s, 'anilist', %s, %s, %s, %s, %s, %s::jsonb)
                                     ON CONFLICT DO NOTHING;
-                                """, (anime_id, username, str(rev.get("user", {}).get("id", "0")), rating_10, category, disp_id, json.dumps(evidence)))
+                                """, (anime_id, username, str(rev.get("user", {}).get("id", "0")), rating_10, category, disp_id, evidence_json))
                         conn.commit()
                 delay_api(0.8)
     except Exception as e:
@@ -516,7 +550,7 @@ def run_sync():
         default_eng = franchise["title_english"]
         default_rom = franchise["title_romaji"]
         
-        # Crash-proof dynamic retrieval fallback for missing dict keys [14]
+        # Crash-proof fallback resolver [14]
         rival_id = franchise.get("rival_anilist_id") or (21355 if anime_id == 1 else 108465)
         
         rep_anilist_id = franchise["seasons"][0]["anilist_ids"][0]
