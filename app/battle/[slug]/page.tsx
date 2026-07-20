@@ -136,9 +136,6 @@ export default async function BattlePage({ params }: BattlePageProps) {
   const animeA = battle.anime_a!;
   const animeB = battle.anime_b!;
 
-  const activeBannerA = '/images/mushoku-banner.jpg';
-  const activeBannerB = '/images/rezero-banner.jpg';
-
   const animeMap = {
     [animeA.id]: {
       title: animeA.title_english || 'Tracker A',
@@ -253,18 +250,22 @@ export default async function BattlePage({ params }: BattlePageProps) {
         </div>
         <ScoreChart
           data={chartData}
-          seriesKeys={['a_anilist', 'b_anilist', 'a_mal', 'b_mal']}
+          seriesKeys={['a_anilist', 'b_anilist', 'a_mal', 'b_mal', 'a_kitsu', 'b_kitsu']}
           seriesLabels={{
             a_anilist: `${animeA.title_english} (AL)`,
             b_anilist: `${animeB.title_english} (AL)`,
             a_mal: `${animeA.title_english} (MAL)`,
-            b_mal: `${animeB.title_english} (MAL)`
+            b_mal: `${animeB.title_english} (MAL)`,
+            a_kitsu: `${animeA.title_english} (Kitsu)`,
+            b_kitsu: `${animeB.title_english} (Kitsu)`
           }}
           colors={{
             a_anilist: '#7c3aed',
             b_anilist: '#06b6d4',
             a_mal: '#c084fc',
-            b_mal: '#3b82f6'
+            b_mal: '#3b82f6',
+            a_kitsu: '#f43f5e',
+            b_kitsu: '#f97316'
           }}
         />
       </section>

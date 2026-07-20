@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Anime } from '@/types';
-import { motion } from 'framer-motion';
 
 export default function SubmitEvidencePage() {
   const [animeList, setAnimeList] = useState<Anime[]>([]);
@@ -14,6 +13,14 @@ export default function SubmitEvidencePage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [success, setSuccess] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Suggested Show Form states (Discord Webhook target)
+  const [suggestShow, setSuggestShow] = useState<string>('');
+  const [suggestPlatform, setSuggestPlatform] = useState<string>('MyAnimeList');
+  const [suggestNotes, setSuggestNotes] = useState<string>('');
+  const [suggestLoading, setSuggestLoading] = useState<boolean>(false);
+  const [suggestSuccess, setSuggestSuccess] = useState<boolean>(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadAnime() {
@@ -26,7 +33,7 @@ export default function SubmitEvidencePage() {
     loadAnime();
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmitEvidence = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
@@ -39,7 +46,6 @@ export default function SubmitEvidencePage() {
     }
 
     try {
-      // 1. Write the community submission directly to Supabase
       const { error: insertError } = await supabase
         .from('community_submissions')
         .insert({
@@ -51,16 +57,16 @@ export default function SubmitEvidencePage() {
 
       if (insertError) throw insertError;
 
-      // 2. Dispatch a dynamic notification directly to your Discord Webhook [14]
+      // Dispatch real-time alert to Discord [14]
       const animeName = animeList.find(a => a.id.toString() === selectedAnimeId)?.title_english || 'Tracked Campaign';
       try {
         await fetch('/api/feedback', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            show: animeName,
+            show: `[EVIDENCE] ${animeName}`,
             platform: platform.toUpperCase(),
-            notes: notes.trim() || `Submitted profile links: ${profileUrl}`
+            notes: `Flagged Suspect: ${profileUrl}\nNotes: ${notes.trim() || 'None'}`
           })
         });
       } catch (discordErr) {
@@ -77,117 +83,194 @@ export default function SubmitEvidencePage() {
     }
   };
 
+  const handleSendSuggestion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSuggestLoading(true);
+    setSuggestError(null);
+    setSuggestSuccess(false);
+
+    if (!suggestShow.trim()) {
+      setSuggestError('A show title is required.');
+      setSuggestLoading(false);
+      return;
+    }
+
+    try {
+      // POST directly to Next.js API handler
+      const res = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          show: suggestShow.trim(),
+          platform: suggestPlatform,
+          notes: suggestNotes.trim() || 'No additional notes provided.'
+        })
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to dispatch recommendation.');
+      }
+
+      setSuggestSuccess(true);
+      setSuggestShow('');
+      setSuggestNotes('');
+    } catch (err: any) {
+      setSuggestError(err.message || 'An issue occurred sending suggestions.');
+    } finally {
+      setSuggestLoading(false);
+    }
+  };
+
   return (
-    <div className="max-w-3xl mx-auto space-y-8 py-12">
-      <div className="space-y-3">
+    <div className="max-w-6xl mx-auto space-y-12 py-12 px-4 sm:px-6">
+      <div className="space-y-3 text-center md:text-left">
         <span className="inline-flex px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest bg-accent-gold/10 text-accent-gold border border-accent-gold/20">
           ✦ Verified Community Audits
         </span>
         <h1 className="text-3xl md:text-4xl font-black tracking-tight text-text-primary uppercase">
-          Submit Sabotage Evidence
+          Campaign Reports & Suggestion Hub
         </h1>
-        <p className="text-sm text-text-secondary leading-relaxed">
-          Found bot nets, burner coordination lists, or platform review bombs? Upload evidence links below. Verified entries appear on our audit log.
+        <p className="text-sm text-text-secondary leading-relaxed max-w-2xl">
+          Report active bot nets or suggest new anime databases to investigate. Real-time requests are forwarded directly to our Discord moderation team [14].
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
         
-        {/* Form elements */}
-        <div className="lg:col-span-8 border border-border rounded-2xl bg-surface p-6 md:p-8 relative overflow-hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(6,182,212,0.05),transparent_40%)] pointer-events-none" />
+        {/* Form 1: Report Suspect Profiles */}
+        <div className="border border-border rounded-2xl bg-surface p-6 md:p-8 relative overflow-hidden flex flex-col justify-between">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(239,68,68,0.03),transparent_40%)] pointer-events-none" />
           
-          <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
-            {error && (
-              <div className="p-4 rounded-lg bg-danger/10 border border-danger/20 text-xs text-danger font-bold font-mono">
-                [ERROR] {error}
+          <div className="space-y-6 relative z-10">
+            <div>
+              <h3 className="text-lg font-black uppercase tracking-wider text-text-primary">1. Report Coordinated Abuse</h3>
+              <p className="text-xs text-text-secondary mt-1">Submit links to suspicious platform burners or rival fandom stans [14].</p>
+            </div>
+
+            <form onSubmit={handleSubmitEvidence} className="space-y-5">
+              {error && <div className="p-3.5 rounded-lg bg-danger/10 border border-danger/25 text-xs text-danger font-mono font-bold">[ERROR] {error}</div>}
+              {success && <div className="p-3.5 rounded-lg bg-success/10 border border-success/25 text-xs text-success font-mono font-bold">[SUCCESS] Evidence logged and dispatched to Discord.</div>}
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-text-secondary">Target Anime</label>
+                <select
+                  value={selectedAnimeId}
+                  onChange={(e) => setSelectedAnimeId(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-background p-3 text-xs font-semibold text-text-primary focus:outline-none"
+                >
+                  {animeList.map((anime) => (
+                    <option key={anime.id} value={anime.id}>
+                      {anime.title_english || anime.title_romaji}
+                    </option>
+                  ))}
+                </select>
               </div>
-            )}
 
-            {success && (
-              <div className="p-4 rounded-lg bg-success/10 border border-success/20 text-xs text-success font-bold font-mono">
-                [SUCCESS] Submission successfully queued for validation and dispatched to Discord!
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-text-secondary">Reporting Site</label>
+                <select
+                  value={platform}
+                  onChange={(e) => setPlatform(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-background p-3 text-xs font-semibold text-text-primary focus:outline-none"
+                >
+                  <option value="anilist">AniList</option>
+                  <option value="mal">MyAnimeList (MAL)</option>
+                </select>
               </div>
-            )}
 
-            <div className="space-y-2">
-              <label className="text-xs font-black uppercase tracking-widest text-text-secondary">Target Anime</label>
-              <select
-                value={selectedAnimeId}
-                onChange={(e) => setSelectedAnimeId(e.target.value)}
-                className="w-full rounded-lg border border-border bg-background p-3 text-sm font-semibold text-text-primary focus:outline-none focus:border-accent-cyan transition-colors"
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-text-secondary">Profile URL Link</label>
+                <input
+                  type="url"
+                  required
+                  placeholder="https://myanimelist.net/profile/Username"
+                  value={profileUrl}
+                  onChange={(e) => setProfileUrl(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-background p-3 text-xs font-mono text-text-primary focus:outline-none placeholder-text-secondary/10"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-text-secondary">Audit notes</label>
+                <textarea
+                  rows={4}
+                  placeholder="Describe behavior..."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-background p-3 text-xs text-text-primary focus:outline-none placeholder-text-secondary/10 resize-none"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3.5 rounded-lg text-xs font-black uppercase tracking-wider bg-text-primary text-background hover:bg-text-primary/95 transition-all disabled:opacity-50"
               >
-                {animeList.map((anime) => (
-                  <option key={anime.id} value={anime.id}>
-                    {anime.title_english || anime.title_romaji}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-black uppercase tracking-widest text-text-secondary">Reporting Platform</label>
-              <select
-                value={platform}
-                onChange={(e) => setPlatform(e.target.value)}
-                className="w-full rounded-lg border border-border bg-background p-3 text-sm font-semibold text-text-primary focus:outline-none focus:border-accent-cyan transition-colors"
-              >
-                <option value="anilist">AniList</option>
-                <option value="mal">MyAnimeList (MAL)</option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-black uppercase tracking-widest text-text-secondary">Profile URL Link</label>
-              <input
-                type="url"
-                required
-                placeholder="e.g. https://myanimelist.net/profile/Username"
-                value={profileUrl}
-                onChange={(e) => setProfileUrl(e.target.value)}
-                className="w-full rounded-lg border border-border bg-background p-3 text-sm font-mono text-text-primary focus:outline-none focus:border-accent-cyan transition-colors placeholder-text-secondary/20"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-black uppercase tracking-widest text-text-secondary">Audit Notes & Proof</label>
-              <textarea
-                rows={4}
-                placeholder="Describe behavior: e.g. Created 2 days ago, rated Re:Zero 10/10 and Mushoku Tensei 1/10..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="w-full rounded-lg border border-border bg-background p-3 text-sm text-text-primary focus:outline-none focus:border-accent-cyan transition-colors placeholder-text-secondary/20 resize-none"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3.5 rounded-lg text-xs font-black uppercase tracking-wider bg-text-primary text-background hover:bg-text-primary/90 disabled:opacity-50 transition-colors shadow-lg shadow-text-primary/5"
-            >
-              {loading ? 'Processing Submission...' : 'Upload Evidence Link'}
-            </button>
-          </form>
+                {loading ? 'Logging Entry...' : 'Upload Evidence Link'}
+              </button>
+            </form>
+          </div>
         </div>
 
-        {/* Audit sidebar info */}
-        <div className="lg:col-span-4 space-y-6">
-          <div className="p-5 border border-border rounded-2xl bg-surface/30 space-y-4">
-            <h4 className="text-xs font-black uppercase tracking-widest text-accent-gold">What happens next?</h4>
-            <div className="space-y-3 text-xs text-text-secondary leading-relaxed">
-              <p>
-                <strong className="text-text-primary block mb-1">1. Queue check:</strong>
-                Submissions automatically queue for automated API checks.
-              </p>
-              <p>
-                <strong className="text-text-primary block mb-1">2. Heuristics audit:</strong>
-                Our crawlers extract account metadata and check completed lists for faction anomalies.
-              </p>
-              <p>
-                <strong className="text-text-primary block mb-1">3. Live integration:</strong>
-                Verified profiles appear inside the Coordinated activity logs, with anonymized identifiers.
-              </p>
+        {/* Form 2: Talk to us / Request campaign (Discord Webhook interface) */}
+        <div className="border border-border rounded-2xl bg-surface p-6 md:p-8 relative overflow-hidden flex flex-col justify-between">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,rgba(6,182,212,0.03),transparent_40%)] pointer-events-none" />
+          
+          <div className="space-y-6 relative z-10">
+            <div>
+              <h3 className="text-lg font-black uppercase tracking-wider text-text-primary">2. Talk to us / Request Audit</h3>
+              <p className="text-xs text-text-secondary mt-1">Which show should we investigate next? Recommend active campaigns directly to Discord [14].</p>
             </div>
+
+            <form onSubmit={handleSendSuggestion} className="space-y-5">
+              {suggestError && <div className="p-3.5 rounded-lg bg-danger/10 border border-danger/25 text-xs text-danger font-mono font-bold">[ERROR] {suggestError}</div>}
+              {suggestSuccess && <div className="p-3.5 rounded-lg bg-success/10 border border-success/25 text-xs text-success font-mono font-bold">[SUCCESS] Recommendation sent directly to Discord!</div>}
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-text-secondary">Anime / Franchise Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Frieren: Beyond Journey's End"
+                  value={suggestShow}
+                  onChange={(e) => setSuggestShow(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-background p-3 text-xs font-semibold text-text-primary focus:outline-none placeholder-text-secondary/10"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-text-secondary">Platform Context</label>
+                <select
+                  value={suggestPlatform}
+                  onChange={(e) => setSuggestPlatform(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-background p-3 text-xs font-semibold text-text-primary focus:outline-none"
+                >
+                  <option value="MyAnimeList">MyAnimeList (MAL)</option>
+                  <option value="AniList">AniList</option>
+                  <option value="IMDb">IMDb</option>
+                  <option value="All Platforms">All of Them</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-text-secondary">Notes & Why We Should Investigate</label>
+                <textarea
+                  rows={6}
+                  placeholder="e.g. Score dropped 0.40 in 2 hours after Episode 12 aired. Hundreds of 1/10 reviews with 0 finished shows..."
+                  value={suggestNotes}
+                  onChange={(e) => setSuggestNotes(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-background p-3 text-xs text-text-primary focus:outline-none placeholder-text-secondary/10 resize-none"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={suggestLoading}
+                className="w-full py-3.5 rounded-lg text-xs font-black uppercase tracking-wider bg-text-primary text-background hover:bg-text-primary/95 transition-all disabled:opacity-50"
+              >
+                {suggestLoading ? 'Sending Alerts...' : 'Request Campaign Audit 📢'}
+              </button>
+            </form>
           </div>
         </div>
 

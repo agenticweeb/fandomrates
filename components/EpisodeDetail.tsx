@@ -45,10 +45,18 @@ export default function EpisodeDetail({
             <img
               src={episode.thumbnail_url}
               alt="Episode Preview banner"
+              onError={(event) => {
+                event.currentTarget.onerror = null;
+                event.currentTarget.src = "/images/fallback-image.svg";
+              }}
               className="w-full h-full object-cover"
             />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-surface to-background flex items-center justify-center" />
+            <img
+              src="/images/fallback-image.svg"
+              alt="Episode Preview banner"
+              className="w-full h-full object-cover"
+            />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/40 to-transparent"></div>
           

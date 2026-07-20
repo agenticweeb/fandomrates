@@ -51,12 +51,18 @@ export default function EpisodeCard({
             src={episode.thumbnail_url}
             alt={episode.episode_title || `Episode ${episode.episode_number}`}
             loading="lazy"
+            onError={(event) => {
+              event.currentTarget.onerror = null;
+              event.currentTarget.src = "/images/fallback-image.svg";
+            }}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-surface to-background flex items-center justify-center text-[10px] text-text-secondary font-mono">
-            Thumbnail N/A
-          </div>
+          <img
+            src="/images/fallback-image.svg"
+            alt={episode.episode_title || `Episode ${episode.episode_number}`}
+            className="w-full h-full object-cover"
+          />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent opacity-70"></div>
       </div>

@@ -1,0 +1,18 @@
+<svg width="1200" height="1800" viewBox="0 0 1200 1800" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="1800" rx="48" fill="#0B0D14"/>
+  <rect x="56" y="56" width="1088" height="1688" rx="36" stroke="#2A2E3A" stroke-width="8"/>
+  <rect x="124" y="132" width="952" height="336" rx="24" fill="#121620"/>
+  <rect x="124" y="520" width="952" height="1048" rx="24" fill="#121620"/>
+  <circle cx="324" cy="300" r="116" fill="#1E2432"/>
+  <path d="M252 300L292 340L404 228" stroke="#66E3FF" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="188" y="616" width="344" height="26" rx="13" fill="#2C3345"/>
+  <rect x="188" y="676" width="420" height="22" rx="11" fill="#2C3345"/>
+  <rect x="188" y="732" width="360" height="22" rx="11" fill="#2C3345"/>
+  <rect x="188" y="820" width="280" height="22" rx="11" fill="#2C3345"/>
+  <rect x="188" y="900" width="424" height="22" rx="11" fill="#2C3345"/>
+  <rect x="188" y="984" width="320" height="22" rx="11" fill="#2C3345"/>
+  <rect x="808" y="612" width="168" height="168" rx="24" fill="#151925" stroke="#2A2E3A" stroke-width="6"/>
+  <path d="M850 732L890 692L928 730" stroke="#7C7EFF" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="600" y="1570" text-anchor="middle" font-family="Arial, sans-serif" font-size="68" font-weight="700" fill="#E6E8F2">Image unavailable</text>
+  <text x="600" y="1642" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" fill="#8B93A8">FandomRates fallback asset</text>
+</svg>

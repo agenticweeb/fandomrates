@@ -25,6 +25,7 @@ export default function Navbar() {
         {/* Desktop Navigation Links */}
         <nav className="hidden md:flex items-center gap-8 text-xs font-black uppercase tracking-wider text-text-secondary">
           <Link href="/" className="hover:text-text-primary transition-colors">Dashboard</Link>
+          <Link href="/battles" className="hover:text-text-primary transition-colors">Battles</Link>
           <Link href="/methodology" className="hover:text-text-primary transition-colors">Methodology</Link>
           <Link href="/submit" className="hover:text-text-primary transition-colors">Submit Evidence</Link>
         </nav>
@@ -57,6 +58,13 @@ export default function Navbar() {
                 className="py-2 hover:text-text-primary transition-colors border-b border-border/40"
               >
                 Dashboard
+              </Link>
+              <Link 
+                href="/battles" 
+                onClick={() => setIsOpen(false)}
+                className="py-2 hover:text-text-primary transition-colors border-b border-border/40"
+              >
+                Battles
               </Link>
               <Link 
                 href="/methodology" 

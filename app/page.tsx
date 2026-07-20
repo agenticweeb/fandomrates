@@ -24,10 +24,11 @@ async function getDashboardData() {
     .order('detected_at', { ascending: false })
     .limit(5) as { data: (AnomalyEvent & { anime: { title_english: string; title_romaji: string } })[] | null };
 
+  // FIX: Changed to ascending: true so the chart plots oldest to newest correctly
   const { data: snapshots } = await supabase
     .from('score_snapshots')
     .select('scraped_at, score, platform, anime_id')
-    .order('scraped_at', { ascending: false }) as { data: ScoreSnapshot[] | null };
+    .order('scraped_at', { ascending: true }) as { data: ScoreSnapshot[] | null };
 
   return { battles: battles || [], anomalies: anomalies || [], snapshots: snapshots || [] };
 }

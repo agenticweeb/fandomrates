@@ -128,8 +128,12 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
                   <div className="lg:col-span-5 flex flex-col sm:flex-row items-center gap-6 z-10">
                     <div className="relative w-28 h-40 rounded-xl overflow-hidden shadow-2xl border border-border group-hover:shadow-white/5 transition-all duration-500 flex-shrink-0">
                       <img 
-                        src={animeA.cover_image_url || "/fallback.jpg"} 
-                        alt={animeA.title_english || "Tracker A"} 
+                        src={animeA.cover_image_url || "/images/fallback-image.svg"} 
+                        alt={animeA.title_english || "Tracker A"}
+                        onError={(event) => {
+                          event.currentTarget.onerror = null;
+                          event.currentTarget.src = "/images/fallback-image.svg";
+                        }}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
                     </div>
@@ -139,9 +143,12 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
                       </span>
                       <h3 className="font-extrabold text-xl text-text-primary transition-colors">{animeA.title_english}</h3>
                       <div className="flex flex-wrap gap-4 justify-center sm:justify-start font-mono font-black text-sm pt-2">
-                        <div className="text-center sm:text-left">
+                        <div className="text-center sm:text-left rounded-lg border border-border bg-background/70 px-3 py-2">
                           <span className="text-[10px] text-text-secondary block font-bold uppercase tracking-widest">Platform Average</span>
-                          <span className="text-xl text-accent-cyan">AL Live Score: {statsA.currentAvg.toFixed(2)} (flat)</span>
+                          <span className="text-lg text-accent-cyan">{statsA.currentAvg.toFixed(2)} / 10</span>
+                          <span className="mt-1 block text-[10px] text-text-secondary">
+                            {statsA.delta >= 0 ? '+' : ''}{statsA.delta.toFixed(2)} vs prior
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -156,8 +163,12 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
                   <div className="lg:col-span-5 flex flex-col sm:flex-row-reverse items-center gap-6 z-10 text-center sm:text-right">
                     <div className="relative w-28 h-40 rounded-xl overflow-hidden shadow-2xl border border-border group-hover:shadow-white/5 transition-all duration-500 flex-shrink-0">
                       <img 
-                        src={animeB.cover_image_url || "/fallback.jpg"} 
-                        alt={animeB.title_english || "Tracker B"} 
+                        src={animeB.cover_image_url || "/images/fallback-image.svg"} 
+                        alt={animeB.title_english || "Tracker B"}
+                        onError={(event) => {
+                          event.currentTarget.onerror = null;
+                          event.currentTarget.src = "/images/fallback-image.svg";
+                        }}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
                     </div>
@@ -167,9 +178,12 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
                       </span>
                       <h3 className="font-extrabold text-xl text-text-primary transition-colors">{animeB.title_english}</h3>
                       <div className="flex flex-wrap gap-4 justify-center sm:justify-end font-mono font-black text-sm pt-2">
-                        <div>
+                        <div className="rounded-lg border border-border bg-background/70 px-3 py-2 text-center sm:text-right">
                           <span className="text-[10px] text-text-secondary block font-bold uppercase tracking-widest">Platform Average</span>
-                          <span className="text-xl text-accent-cyan">AL Live Score: {statsB.currentAvg.toFixed(2)} (flat)</span>
+                          <span className="text-lg text-accent-cyan">{statsB.currentAvg.toFixed(2)} / 10</span>
+                          <span className="mt-1 block text-[10px] text-text-secondary">
+                            {statsB.delta >= 0 ? '+' : ''}{statsB.delta.toFixed(2)} vs prior
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -180,7 +194,7 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
                     <span className="text-xs text-text-secondary font-mono">
-                      Tracking live
+                      Fresh score snapshots • Recent reviews
                     </span>
                   </div>
                   <Link 
@@ -216,10 +230,10 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
                     {anomaly.anime?.title_english || anomaly.anime?.title_romaji || "Tracked Title"}
                   </h4>
                   <p className="text-xs text-text-secondary">
-                    Audited snapshot shifting from <span className="font-mono font-bold text-text-primary">{anomaly.score_before.toFixed(2)}</span> down to <span className="font-mono font-bold text-accent-cyan">{anomaly.score_after.toFixed(2)}</span>
+                    Score moved from <span className="font-mono font-bold text-text-primary">{anomaly.score_before.toFixed(2)}</span> to <span className="font-mono font-bold text-accent-cyan">{anomaly.score_after.toFixed(2)}</span>
                   </p>
                 </div>
-                <div className="text-xs text-text-secondary text-left md:text-right font-mono">
+                <div className="text-xs text-text-secondary text-left md:text-right font-mono rounded-lg border border-border bg-background/70 px-3 py-2">
                   {new Date(anomaly.detected_at).toLocaleString('en-US', {
                     month: 'short',
                     day: 'numeric',
@@ -232,8 +246,8 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
           ) : (
             <div className="p-8 text-center text-sm text-text-secondary flex flex-col items-center justify-center gap-2">
               <span className="text-3xl">🟢</span>
-              <p className="font-extrabold text-text-primary uppercase tracking-widest">Quiet week</p>
-              <p className="text-xs text-text-secondary">No coordinated campaigns detected. Yet.</p>
+              <p className="font-extrabold text-text-primary uppercase tracking-widest">No fresh anomalies</p>
+              <p className="text-xs text-text-secondary">Recent activity has not produced a new flagged deviation yet.</p>
             </div>
           )}
         </div>

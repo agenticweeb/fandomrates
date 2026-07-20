@@ -43,12 +43,18 @@ export default function SeasonSelector({ seasons, selectedSeasonId, onSelectSeas
                     src={s.cover_image_url}
                     alt={s.title_english || `Season ${s.season_number}`}
                     loading="lazy"
+                    onError={(event) => {
+                      event.currentTarget.onerror = null;
+                      event.currentTarget.src = "/images/fallback-image.svg";
+                    }}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-text-secondary text-xs">
-                    Poster N/A
-                  </div>
+                  <img
+                    src="/images/fallback-image.svg"
+                    alt={s.title_english || `Season ${s.season_number}`}
+                    className="w-full h-full object-cover"
+                  />
                 )}
                 {isSelected && (
                   <div className="absolute top-3 right-3 w-6 h-6 rounded-full bg-accent-cyan flex items-center justify-center text-xs text-background font-black shadow-lg">
