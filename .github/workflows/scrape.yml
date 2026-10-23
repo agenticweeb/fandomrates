@@ -8,14 +8,48 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    concurrency:
+      group: fandomrates-scraper-production
+      cancel-in-progress: false
+    environment: production
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
         with:
           python-version: '3.11'
+
+      - name: Validate scraper configuration
+        env:
+          FANDOMRATES_ENV: production
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in DB_HOST DB_USER DB_PASSWORD DB_NAME DB_PORT; do
+            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "Missing required production secret(s): ${missing[*]}" >&2
+            echo "Add them to the protected GitHub Actions production environment." >&2
+            exit 2
+          fi
+          case "$DB_PORT" in
+            ''|*[!0-9]*) echo "DB_PORT must be numeric" >&2; exit 2 ;;
+          esac
+          if [ "$DB_PORT" -lt 1 ] || [ "$DB_PORT" -gt 65535 ]; then
+            echo "DB_PORT must be between 1 and 65535" >&2
+            exit 2
+          fi
 
       - name: Install dependencies
         run: |
@@ -24,10 +58,13 @@ jobs:
 
       - name: Run scraper
         env:
+          FANDOMRATES_ENV: production
           DB_HOST: ${{ secrets.DB_HOST }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_NAME: ${{ secrets.DB_NAME }}
           DB_PORT: ${{ secrets.DB_PORT }}
+          DB_SSLMODE: require
         run: |
+          python scraper.py --discover --limit 50
           python scraper.py --run

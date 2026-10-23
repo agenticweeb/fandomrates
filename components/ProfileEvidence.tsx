@@ -130,7 +130,7 @@ export default function ProfileEvidence({ profiles, animeMap }: ProfileEvidenceP
                         <tr className="bg-background/40">
                           <td colSpan={6} className="p-6 border-b border-border">
                             <div className="bg-[#050508] border border-border/80 rounded-xl p-5 font-mono text-xs text-text-secondary overflow-x-auto max-w-4xl mx-auto">
-                              <p className="text-accent-gold mb-3 font-black">// AUDIT TRAIL LOG EVIDENCE PAYLOAD</p>
+                              <p className="text-accent-gold mb-3 font-black">{'// AUDIT TRAIL LOG EVIDENCE PAYLOAD'}</p>
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 text-text-secondary border-b border-border/50 pb-4">
                                 <div>
                                   <span className="text-text-primary font-bold">Account Age:</span> {profile.evidence?.account_age_days ? `${Math.round(profile.evidence.account_age_days)} days` : 'N/A'}
@@ -146,7 +146,7 @@ export default function ProfileEvidence({ profiles, animeMap }: ProfileEvidenceP
                                 </div>
                               </div>
                               <div>
-                                <span className="text-text-primary font-bold">// Public Favorites Shelf Preview:</span>
+                                <span className="text-text-primary font-bold">{'// Public Favorites Shelf Preview:'}</span>
                                 {profile.evidence?.favorites && profile.evidence.favorites.length > 0 ? (
                                   <ul className="list-disc pl-5 mt-2 space-y-1 text-text-secondary">
                                     {profile.evidence.favorites.map((fav: string, i: number) => (
@@ -229,7 +229,7 @@ export default function ProfileEvidence({ profiles, animeMap }: ProfileEvidenceP
                       className="overflow-hidden pt-2"
                     >
                       <div className="bg-[#050508] border border-border/80 rounded-lg p-4 font-mono text-[11px] text-text-secondary space-y-3">
-                        <p className="text-accent-gold font-black border-b border-border/50 pb-1">// AUDIO LOG PROOF</p>
+                        <p className="text-accent-gold font-black border-b border-border/50 pb-1">{'// AUDIO LOG PROOF'}</p>
                         <div className="space-y-1.5">
                           <div><span className="text-text-primary font-bold">Age:</span> {profile.evidence?.account_age_days ? `${Math.round(profile.evidence.account_age_days)} days` : 'N/A'}</div>
                           <div><span className="text-text-primary font-bold">List size:</span> {profile.evidence?.list_count ?? 'N/A'} completed</div>

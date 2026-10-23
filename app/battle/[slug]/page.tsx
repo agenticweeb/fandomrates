@@ -1,11 +1,9 @@
 import React from 'react';
 import { supabase } from '@/lib/supabase';
-import { Battle, ScoreSnapshot, SuspiciousProfile, AnomalyEvent, Season, Episode, Review } from '@/types';
+import { Battle, ScoreSnapshot, AnomalyEvent, Season, Episode, Review } from '@/types';
 import ScoreChart from '@/components/ScoreChart';
 import EpisodeGrid from '@/components/EpisodeGrid';
-import ProfileEvidence from '@/components/ProfileEvidence';
 import RatingDistributionChart from '@/components/RatingDistributionChart';
-import PlatformBattlegrounds from '@/components/PlatformBattlegrounds';
 import PopularityMetrics from '@/components/PopularityMetrics';
 import Link from 'next/link';
 
@@ -29,7 +27,7 @@ async function getBattleData(slug: string) {
     .single() as { data: Battle | null };
 
   if (!battle || !battle.anime_a || !battle.anime_b) {
-    return { battle: null, chartData: [], suspicious: [], anomalies: [], seasonsA: [], seasonsB: [], epsDataA: [], epsDataB: [], reviewsList: [] };
+    return { battle: null, chartData: [], anomalies: [], seasonsA: [], seasonsB: [], epsDataA: [], epsDataB: [], reviewsList: [] };
   }
 
   const idA = battle.anime_a_id;
@@ -68,12 +66,6 @@ async function getBattleData(slug: string) {
 
   const snapData = snapshots || [];
 
-  const { data: suspicious } = await supabase
-    .from('suspicious_profiles')
-    .select('*')
-    .in('anime_id', [idA, idB])
-    .order('found_at', { ascending: false }) as { data: SuspiciousProfile[] | null };
-
   const { data: anomalies } = await supabase
     .from('anomaly_events')
     .select('*')
@@ -97,7 +89,6 @@ async function getBattleData(slug: string) {
   return { 
     battle, 
     chartData, 
-    suspicious: suspicious || [], 
     anomalies: anomalies || [],
     seasonsA,
     seasonsB,
@@ -113,7 +104,6 @@ export default async function BattlePage({ params }: BattlePageProps) {
   const { 
     battle, 
     chartData, 
-    suspicious, 
     anomalies,
     seasonsA,
     seasonsB,
@@ -136,32 +126,11 @@ export default async function BattlePage({ params }: BattlePageProps) {
   const animeA = battle.anime_a!;
   const animeB = battle.anime_b!;
 
-  const animeMap = {
-    [animeA.id]: {
-      title: animeA.title_english || 'Tracker A',
-      colorClass: 'text-text-primary bg-surface-elevated',
-      borderClass: 'border-border'
-    },
-    [animeB.id]: {
-      title: animeB.title_english || 'Tracker B',
-      colorClass: 'text-text-primary bg-surface-elevated',
-      borderClass: 'border-border'
-    }
-  };
-
-  const mushokuFallbackCurve = [
-    { rating: '1', count: 1450 }, { rating: '2', count: 210 }, { rating: '3', count: 110 }, { rating: '4', count: 80 }, { rating: '5', count: 120 }, { rating: '6', count: 320 }, { rating: '7', count: 850 }, { rating: '8', count: 1950 }, { rating: '9', count: 3800 }, { rating: '10', count: 4900 }
-  ];
-
-  const rezeroFallbackCurve = [
-    { rating: '1', count: 980 }, { rating: '2', count: 145 }, { rating: '3', count: 80 }, { rating: '4', count: 65 }, { rating: '5', count: 110 }, { rating: '6', count: 280 }, { rating: '7', count: 810 }, { rating: '8', count: 1840 }, { rating: '9', count: 3650 }, { rating: '10', count: 5800 }
-  ];
-
-  const statsA_AL_pop = snapData.find(s => s.anime_id === animeA.id && s.platform === 'anilist')?.popularity || 437420;
-  const statsA_MAL_pop = snapData.find(s => s.anime_id === animeA.id && s.platform === 'mal')?.popularity || 1595540;
+  const statsA_AL_pop = snapData.find(s => s.anime_id === animeA.id && s.platform === 'anilist')?.popularity ?? null;
+  const statsA_MAL_pop = snapData.find(s => s.anime_id === animeA.id && s.platform === 'mal')?.popularity ?? null;
   
-  const statsB_AL_pop = snapData.find(s => s.anime_id === animeB.id && s.platform === 'anilist')?.popularity || 601809;
-  const statsB_MAL_pop = snapData.find(s => s.anime_id === animeB.id && s.platform === 'mal')?.popularity || 2484599;
+  const statsB_AL_pop = snapData.find(s => s.anime_id === animeB.id && s.platform === 'anilist')?.popularity ?? null;
+  const statsB_MAL_pop = snapData.find(s => s.anime_id === animeB.id && s.platform === 'mal')?.popularity ?? null;
 
   // Calculate dynamic 7-Day Activity stats
   const sevenDaysAgo = new Date();
@@ -171,10 +140,8 @@ export default async function BattlePage({ params }: BattlePageProps) {
   const recentA = recentReviews.filter(r => r.anime_id === animeA.id);
   const recentB = recentReviews.filter(r => r.anime_id === animeB.id);
 
-  const bombersA = recentA.filter(r => r.category === 'bomber').length;
-  const inflatorsA = recentA.filter(r => r.category === 'inflator').length;
-  const bombersB = recentB.filter(r => r.category === 'bomber').length;
-  const inflatorsB = recentB.filter(r => r.category === 'inflator').length;
+  const recentCountA = recentA.length;
+  const recentCountB = recentB.length;
 
   return (
     <div className="space-y-16">
@@ -220,7 +187,7 @@ export default async function BattlePage({ params }: BattlePageProps) {
       <section className="space-y-6">
         <div>
           <h3 className="text-2xl font-black uppercase tracking-wider text-text-primary">Analytical Score Distribution</h3>
-          <p className="text-sm text-text-secondary mt-1">Exposes the exact distribution of 1s (coordinated low-rating signatures) and 10s (coordinated high-rating signatures).</p>
+          <p className="text-sm text-text-secondary mt-1">Shows the observed review-score distribution when the named source provides enough permitted review data. Extremes are context, not proof of intent.</p>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <RatingDistributionChart 
@@ -229,7 +196,6 @@ export default async function BattlePage({ params }: BattlePageProps) {
             seasons={seasonsA}
             episodes={epsDataA}
             reviews={reviewsList.filter(r => r.anime_id === animeA.id)}
-            fallbackOverall={mushokuFallbackCurve}
           />
           <RatingDistributionChart 
             title={`${animeB.title_english} Distribution`} 
@@ -237,7 +203,6 @@ export default async function BattlePage({ params }: BattlePageProps) {
             seasons={seasonsB}
             episodes={epsDataB}
             reviews={reviewsList.filter(r => r.anime_id === animeB.id)}
-            fallbackOverall={rezeroFallbackCurve}
           />
         </div>
       </section>
@@ -286,23 +251,23 @@ export default async function BattlePage({ params }: BattlePageProps) {
         />
       </section>
 
-      {/* Dynamic 7-Day Activity Pulse */}
+      {/* Dynamic 7-Day accepted review activity */}
       <section className="space-y-6">
         <div>
-          <h3 className="text-2xl font-black uppercase tracking-wider text-text-primary">Recent 7-Day Activity Pulse</h3>
-          <p className="text-sm text-text-secondary mt-1">Real-time indicators showing active user rating patterns registered this week.</p>
+          <h3 className="text-2xl font-black uppercase tracking-wider text-text-primary">Recent accepted review activity</h3>
+          <p className="text-sm text-text-secondary mt-1">A source-backed count of reviews dated in the last seven days. It does not identify intent or represent all ratings.</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 font-mono text-xs text-text-secondary">
           <div className="border border-border rounded-xl bg-surface p-5 space-y-4">
             <h4 className="font-extrabold text-sm text-text-primary">{animeA.title_english}</h4>
             <div className="grid grid-cols-3 gap-4 text-center">
               <div className="p-3 bg-danger/10 border border-danger/25 rounded-lg text-danger">
-                <div>Low Rating</div>
-                <div className="text-lg font-black mt-1">{bombersA}</div>
+                <div>Reviews in window</div>
+                <div className="text-lg font-black mt-1">{recentCountA}</div>
               </div>
               <div className="p-3 bg-success/10 border border-success/25 rounded-lg text-success col-span-2">
-                <div>High Rating</div>
-                <div className="text-lg font-black mt-1">{inflatorsA}</div>
+                <div>Source-backed only</div>
+                <div className="text-lg font-black mt-1">Yes</div>
               </div>
             </div>
           </div>
@@ -310,12 +275,12 @@ export default async function BattlePage({ params }: BattlePageProps) {
             <h4 className="font-extrabold text-sm text-text-primary">{animeB.title_english}</h4>
             <div className="grid grid-cols-3 gap-4 text-center">
               <div className="p-3 bg-danger/10 border border-danger/25 rounded-lg text-danger">
-                <div>Low Rating</div>
-                <div className="text-lg font-black mt-1">{bombersB}</div>
+                <div>Reviews in window</div>
+                <div className="text-lg font-black mt-1">{recentCountB}</div>
               </div>
               <div className="p-3 bg-success/10 border border-success/25 rounded-lg text-success col-span-2">
-                <div>High Rating</div>
-                <div className="text-lg font-black mt-1">{inflatorsB}</div>
+                <div>Source-backed only</div>
+                <div className="text-lg font-black mt-1">Yes</div>
               </div>
             </div>
           </div>
@@ -353,33 +318,6 @@ export default async function BattlePage({ params }: BattlePageProps) {
         </div>
       </section>
 
-      {/* Platform Factions comparisons */}
-      <section className="space-y-6">
-        <div>
-          <h3 className="text-2xl font-black uppercase tracking-wider text-text-primary">Platform Battlegrounds Audit</h3>
-          <p className="text-sm text-text-secondary mt-1">
-            Analyzing whether MyAnimeList (MAL) or AniList is home to the most intense coordinated high-rating (10/10) or coordinated low-rating (1-2/10) signatures.
-          </p>
-        </div>
-        <PlatformBattlegrounds 
-          profiles={suspicious} 
-          animeA_id={animeA.id} 
-          animeB_id={animeB.id} 
-          animeA_title={animeA.title_english || 'Tracker A'} 
-          animeB_title={animeB.title_english || 'Tracker B'} 
-        />
-      </section>
-
-      {/* Audit table logs */}
-      <section className="space-y-6">
-        <div>
-          <h3 className="text-2xl font-bold tracking-tight text-text-primary">Coordinated Activity Audit Logs</h3>
-          <p className="text-sm text-text-secondary mt-1">
-            Anonymized user logs displaying target shows and behavioral patterns [1].
-          </p>
-        </div>
-        <ProfileEvidence profiles={suspicious} animeMap={animeMap} />
-      </section>
     </div>
   );
 }

@@ -5,10 +5,10 @@ import React, { useMemo } from 'react';
 interface PopularityMetricsProps {
   animeA_title: string;
   animeB_title: string;
-  animeA_al_pop: number;
-  animeA_mal_pop: number;
-  animeB_al_pop: number;
-  animeB_mal_pop: number;
+  animeA_al_pop: number | null;
+  animeA_mal_pop: number | null;
+  animeB_al_pop: number | null;
+  animeB_mal_pop: number | null;
 }
 
 export default function PopularityMetrics({
@@ -27,8 +27,10 @@ export default function PopularityMetrics({
       compactDisplay: 'short'
     }).format(num);
   };
+  const displayValue = (value: number | null) => value === null ? 'Unavailable' : formatCompact(value);
 
   const stats = useMemo(() => {
+    if ([animeA_al_pop, animeA_mal_pop, animeB_al_pop, animeB_mal_pop].some(value => value === null)) return null;
     const malTotal = (animeA_mal_pop || 1) + (animeB_mal_pop || 1);
     const alTotal = (animeA_al_pop || 1) + (animeB_al_pop || 1);
 
@@ -43,6 +45,14 @@ export default function PopularityMetrics({
       }
     };
   }, [animeA_al_pop, animeA_mal_pop, animeB_al_pop, animeB_mal_pop]);
+
+  if (!stats) {
+    return (
+      <div className="rounded-2xl border border-dashed border-border bg-surface p-8 text-center text-sm text-text-secondary">
+        Source population counts are unavailable for at least one platform. No comparative volume is estimated.
+      </div>
+    );
+  }
 
   return (
     <div className="border border-border rounded-2xl bg-surface p-6 space-y-6 relative overflow-hidden">
@@ -69,8 +79,8 @@ export default function PopularityMetrics({
               <div className="bg-accent-rezero transition-all duration-500" style={{ width: `${stats.mal.pctB}%` }} />
             </div>
             <div className="flex justify-between text-[11px] font-mono text-text-secondary">
-              <span className="text-accent-mushoku">● {animeA_title}: {formatCompact(animeA_mal_pop)} ({stats.mal.pctA}%)</span>
-              <span className="text-accent-rezero">{stats.mal.pctB}%: {formatCompact(animeB_mal_pop)} ●</span>
+              <span className="text-accent-mushoku">● {animeA_title}: {displayValue(animeA_mal_pop)} ({stats.mal.pctA}%)</span>
+              <span className="text-accent-rezero">{stats.mal.pctB}%: {displayValue(animeB_mal_pop)} ●</span>
             </div>
           </div>
         </div>
@@ -88,15 +98,15 @@ export default function PopularityMetrics({
               <div className="bg-accent-rezero transition-all duration-500" style={{ width: `${stats.anilist.pctB}%` }} />
             </div>
             <div className="flex justify-between text-[11px] font-mono text-text-secondary">
-              <span className="text-accent-mushoku">● {animeA_title}: {formatCompact(animeA_al_pop)} ({stats.anilist.pctA}%)</span>
-              <span className="text-accent-rezero">{stats.anilist.pctB}%: {formatCompact(animeB_al_pop)} ●</span>
+              <span className="text-accent-mushoku">● {animeA_title}: {displayValue(animeA_al_pop)} ({stats.anilist.pctA}%)</span>
+              <span className="text-accent-rezero">{stats.anilist.pctB}%: {displayValue(animeB_al_pop)} ●</span>
             </div>
           </div>
         </div>
       </div>
 
       <div className="text-[10px] text-text-secondary font-mono border-t border-border/40 pt-3 leading-relaxed">
-        <strong>💡 Insight:</strong> A larger database volume makes a series less vulnerable to isolated review bombs, as a higher volume of organic user scores absorbs malicious ratings more easily.
+        <strong>Context:</strong> Counts describe source coverage, not authenticity or intent. Compare them only within the same source and observation window.
       </div>
     </div>
   );

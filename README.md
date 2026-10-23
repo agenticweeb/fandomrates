@@ -1,7 +1,7 @@
 <div align="center">
   <h1>FandomRates</h1>
-  <p><strong>The Truth Behind Anime Rating Scores</strong></p>
-  <p>A transparency tool for tracking anime ratings across platforms, detecting review bombing patterns, and verifying suspicious activity through public data analysis.</p>
+  <p><strong>Source-native anime rating context</strong></p>
+  <p>A transparency tool for comparing anime ratings, collection windows, coverage, and uncertainty without inventing history or identifying fans.</p>
 
   [![Next.js](https://img.shields.io/badge/Next.js-14-black?style=flat-square&logo=next.js)](https://nextjs.org/)
   [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
@@ -13,18 +13,18 @@
 
 ## What is FandomRates?
 
-FandomRates tracks how anime shows perform across **AniList**, **MyAnimeList (MAL)**, and **Kitsu** — then surfaces anomalies that suggest coordinated review bombing or score inflation.
+FandomRates preserves how anime scores are reported by **AniList**, **MyAnimeList (MAL)**, and **Kitsu**. It keeps platform values separate, records observation timestamps, and labels changes as signals rather than proof of intent.
 
 **First battle:** [Mushoku Tensei](https://anilist.co/anime/108511) vs [Re:Zero](https://anilist.co/anime/21355)
 
 ### Key Features
 
-- **Cross-platform score tracking** — Aggregated scores from AniList, MAL, and Kitsu in one view
-- **Anomaly detection** — Automatic flagging when scores drop or spike by ≥0.30 points
-- **Episode timeline** — Score history mapped to episode air dates
-- **Suspicious profile auditing** — Public profile analysis with anonymized evidence (rival fandom, burner, inflation)
-- **Community submissions** — Fans can submit suspicious profile links for moderation
-- **Full transparency** — Methodology page with raw algorithm, CSV data exports, and clear limitations
+- **Source-native score tracking** — Platform values are shown separately with timestamp and coverage context
+- **All-anime discovery foundation** — Scheduled AniList catalog discovery feeds the canonical anime explorer
+- **Episode timeline** — Episode metadata is stored only when returned by a permitted source
+- **Explicit unavailable states** — Missing scores, counts, history, and review distributions are never estimated
+- **Private correction intake** — Source links and data issues enter a review queue; no public target lists
+- **Full transparency** — Methodology explains evidence states, limitations, retention, and non-claims
 
 ---
 
@@ -45,16 +45,16 @@ FandomRates tracks how anime shows perform across **AniList**, **MyAnimeList (MA
 ```
 fandomrates/
 ├── app/                          # Next.js App Router
-│   ├── battle/[slug]/page.tsx    # Dynamic battle arena (MT vs Re:Zero)
+│   ├── battle/[slug]/page.tsx    # Source comparison page
 │   ├── anime/[id]/page.tsx       # Single anime detail
-│   ├── methodology/page.tsx      # How detection works
-│   ├── submit/page.tsx           # Community evidence form
-│   ├── page.tsx                  # Dashboard (all battles)
+│   ├── methodology/page.tsx      # Evidence and source methodology
+│   ├── submit/page.tsx           # Private correction request form
+│   ├── page.tsx                  # Anime explorer and comparisons
 │   └── layout.tsx                # Root layout + dark theme
 ├── components/                   # Reusable UI components
 │   ├── ScoreChart.tsx
 │   ├── EpisodeTimeline.tsx
-│   ├── ProfileEvidence.tsx
+│   ├── AnimeExplorer.tsx
 │   ├── DataFreshnessBadge.tsx
 │   ├── Navbar.tsx
 │   └── Footer.tsx
@@ -80,19 +80,19 @@ The project uses 7 PostgreSQL tables with Row Level Security (RLS) for public re
 
 | Table | Purpose |
 |-------|---------|
-| `anime` | Metadata for tracked shows (AniList/MAL/Kitsu IDs, titles, images) |
+| `anime` | Canonical discovered anime metadata and source IDs |
 | `score_snapshots` | Weekly score data per platform per anime |
 | `episode_scores` | Per-episode scores and air dates |
-| `anomaly_events` | Detected score drops/spikes (≥0.30 delta) |
-| `suspicious_profiles` | Anonymized flagged accounts with evidence JSONB |
-| `community_submissions` | Fan-submitted evidence links (pending/verified/rejected) |
+| `anomaly_events` | Observed score changes with source and timestamps |
+| `suspicious_profiles` | Legacy/private-only data; not displayed by the public product |
+| `community_submissions` | Legacy schema; correction intake is validated server-side |
 | `battles` | Dynamic battle pairs (anime_a vs anime_b) |
 
 ### Key Design Decisions
 
-- **Anonymization:** Real usernames are stored in the DB but never displayed publicly. A trigger auto-generates `display_id` (e.g., `user_a7f3`) on insert.
-- **RLS:** All tables allow `SELECT` for anonymous users. Only `community_submissions` allows `INSERT` from the public.
-- **JSONB evidence:** The `suspicious_profiles.evidence` column stores arbitrary metadata (favorites, account age, score spread) without schema changes.
+- **Privacy boundary:** The public product does not identify or rank individual voters. Legacy profile tables must be private or removed before any future research use.
+- **RLS:** Public reads should expose only approved aggregate/source-native tables. Correction intake is server-side and must not expose provider credentials.
+- **Source provenance:** Each accepted observation needs a source, timestamp, native scale, and coverage context; missing data remains unavailable.
 
 ### Full SQL
 
@@ -245,8 +245,8 @@ cp .env.example .env
 cp .env.example .env.local
 ```
 
-Edit both files with your Supabase keys:
-- `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` → `.env` (for the Python scraper)
+Edit both files with your Supabase connection values:
+- `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_PORT` → `.env` (for the Python scraper)
 - `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` → `.env.local` (for the Next.js frontend)
 
 Get these from your Supabase project: **Settings → API**.
@@ -261,13 +261,13 @@ Get these from your Supabase project: **Settings → API**.
 
 ### 4. Seed Initial Data
 
-Run the scraper to populate the database with your first battle:
+Discover canonical anime and populate the database:
 
 ```bash
-python scraper.py --seed
+python scraper.py --discover --limit 50
 ```
 
-This fetches Mushoku Tensei and Re:Zero metadata + current scores without triggering anomaly detection.
+This fetches a source-backed AniList catalog. No synthetic score history or profile records are created.
 
 ### 5. Start the Frontend
 
@@ -283,25 +283,24 @@ Open [http://localhost:3000](http://localhost:3000)
 python scraper.py --run
 ```
 
-This pulls fresh scores, detects anomalies, and runs profile sweeps if drops/spikes are found.
+This pulls source-backed scores and episode metadata for the configured detail mappings. It refuses to run without the validated DB contract.
 
 ---
 
 ## How the Scraper Works
 
 ```
-For each tracked anime:
-  1. Fetch scores from AniList (GraphQL), MAL (Jikan), Kitsu (JSON API)
-  2. Store in score_snapshots
-  3. Compare to previous snapshot
-  4. If |delta| >= 0.30 → create anomaly_events row
-  5. If anomaly detected → sweep 150 most recent public profiles
-  6. Categorize each profile:
-     - rival_fandom: has opposing anime in favorites + low score
-     - burner: empty list + new account (<30 days)
-     - inflation: 10/10 rating + empty list
-     - unknown: insufficient data
-  7. Store anonymized profiles in suspicious_profiles
+For catalog discovery:
+  1. Fetch a bounded AniList popularity page
+  2. Validate the GraphQL response and source status
+  3. Upsert canonical title metadata by AniList ID
+
+For detail synchronization:
+  1. Fetch source values from AniList, Jikan/MAL, and Kitsu where available
+  2. Store only values returned by those sources in score_snapshots
+  3. Store episode metadata only when the source returns the episode
+  4. Preserve missing values as unavailable
+  5. Never harvest user-level profiles or infer voter intent
 ```
 
 **Rate limits respected:**
@@ -333,6 +332,7 @@ git push -u origin main
 5. Add **Environment Variables** in the Vercel dashboard:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - Optional: `DISCORD_FEEDBACK_WEBHOOK` for private correction intake
 6. Click **Deploy**
 
 Your site will be live at `https://fandomrates.vercel.app` (or your chosen subdomain).
@@ -354,7 +354,7 @@ To track a new anime pair (e.g., Frieren vs Fullmetal Alchemist):
    INSERT INTO battles (anime_a_id, anime_b_id, slug, is_active)
    VALUES (3, 4, 'frieren-vs-fma', true);
    ```
-4. Run the scraper: `python scraper.py --run`
+4. Run discovery/detail ingestion: `python scraper.py --discover --limit 50` followed by `python scraper.py --run`
 5. The new battle appears automatically on the dashboard
 
 No code changes needed. The frontend reads battles dynamically from the database.

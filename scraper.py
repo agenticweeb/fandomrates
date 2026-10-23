@@ -3,17 +3,15 @@ import os
 import sys
 import re
 import time
-import socket
 import json
-import hashlib
 import argparse
 from datetime import datetime, timezone, timedelta
 import requests
-import psycopg2
-from dotenv import load_dotenv
+from scraper_config import load_local_dotenv, validate_config
 
-# Load variables securely from local hidden .env file
-load_dotenv()
+# Dotenv is opt-in for local development only. CI/production never read a
+# checked-out .env file.
+load_local_dotenv()
 
 # Profile caching dictionary to prevent redundant network hits
 USER_PROFILE_CACHE = {}
@@ -36,20 +34,6 @@ def parse_jikan_date(date_str):
         return None
     return date_str[:10]
 
-def generate_deterministic_user_stats(username, rating_given):
-    hash_val = int(hashlib.md5(username.encode('utf-8')).hexdigest(), 16)
-    list_count = 15 + (hash_val % 335)
-    account_age_days = 45 + (hash_val % 1355)
-    mean_score = 6.2 + (float(hash_val % 26) * 0.1)
-    
-    return {
-        "favorites": [],
-        "list_count": list_count,
-        "mean_score": round(mean_score, 2),
-        "account_age_days": account_age_days,
-        "rating_given": rating_given
-    }
-
 # ==========================================
 # 2. DATABASE CONNECTION WITH PERSISTENT SOCKET
 # ==========================================
@@ -60,24 +44,21 @@ def get_db_connection():
     if DB_CONN and not DB_CONN.closed:
         return DB_CONN
         
-    db_host = os.environ.get("DB_HOST") or "aws-0-eu-central-1.pooler.supabase.com"
-    db_user = os.environ.get("DB_USER") or "postgres.vpmvxoobztkhjrksdfuo"
-    db_password = os.environ.get("DB_PASSWORD")
-    db_name = os.environ.get("DB_NAME") or "postgres"
-    db_port = os.environ.get("DB_PORT") or "5432"
-    
-    try:
-        resolved_ip = socket.gethostbyname(db_host)
-        db_host = resolved_ip
-    except Exception:
-         pass
-         
+    import psycopg2
+    config = validate_config()
     DB_CONN = psycopg2.connect(
-        host=db_host,
-        user=db_user,
-        password=db_password,
-        database=db_name,
-        port=int(db_port)
+        host=config.host,
+        user=config.user,
+        password=config.password,
+        database=config.name,
+        port=config.port,
+        sslmode=config.sslmode,
+        connect_timeout=config.connect_timeout,
+        application_name="fandomrates-scraper",
+        keepalives=1,
+        keepalives_idle=30,
+        keepalives_interval=10,
+        keepalives_count=3,
     )
     return DB_CONN
 
@@ -138,9 +119,16 @@ def safe_requests_get(url, params=None, timeout=60, attempts=5, backoff_base=5):
         try:
             response = requests.get(url, params=params, timeout=timeout)
             if response.status_code == 429:
-                wait_time = backoff_base * (a + 1)
+                retry_after = response.headers.get("Retry-After")
+                try:
+                    wait_time = max(1, int(retry_after)) if retry_after else backoff_base * (a + 1)
+                except ValueError:
+                    wait_time = backoff_base * (a + 1)
                 print(f"       [System Retry] Rate limits hit. Sleeping {wait_time}s (Attempt {a+1}/{attempts})...")
                 time.sleep(wait_time)
+                continue
+            if response.status_code >= 500 and a < attempts - 1:
+                time.sleep(min(60, backoff_base * (2 ** a)))
                 continue
             return response
         except requests.exceptions.RequestException as req_err:
@@ -160,7 +148,11 @@ def safe_anilist_post(query, variables, timeout=60, attempts=3):
                 time.sleep(retry_after)
                 continue
             if response.status_code == 200:
-                return response.json().get("data", {})
+                payload = response.json()
+                if payload.get("errors"):
+                    print("       [AniList Error] GraphQL response contained errors; response quarantined.", file=sys.stderr)
+                    return None
+                return payload.get("data", {})
             else:
                 print(f"       [AniList Error] Status {response.status_code}: {response.text[:100]}")
                 break
@@ -318,27 +310,72 @@ def fetch_anilist_user_stats(username):
         return data.get("User", {})
     return None
 
+
+def discover_anilist_catalog(limit=50):
+    """Discover canonical anime records without hard-coded franchise mappings."""
+    query = """
+    query ($page: Int, $perPage: Int) {
+      Page(page: $page, perPage: $perPage) {
+        media(type: ANIME, sort: POPULARITY_DESC, isAdult: false) {
+          id averageScore popularity episodes status season seasonYear
+          title { english romaji }
+          coverImage { extraLarge large }
+          bannerImage description
+        }
+      }
+    }
+    """
+    page_size = min(max(int(limit), 1), 50)
+    data = safe_anilist_post(query, {"page": 1, "perPage": page_size}) or {}
+    return data.get("Page", {}).get("media", [])
+
+
+def sync_anilist_catalog(limit=50):
+    """Upsert discovered titles; detailed season sync remains source-scoped."""
+    update_query = """
+    UPDATE anime SET title_english = %s, title_romaji = %s, cover_image_url = %s,
+      banner_image_url = %s, synopsis = %s, episodes = %s, status = %s,
+      season = %s, season_year = %s WHERE anilist_id = %s RETURNING id;
+    """
+    insert_query = """
+    INSERT INTO anime (anilist_id, title_english, title_romaji, cover_image_url,
+      banner_image_url, synopsis, episodes, status, season, season_year)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+    """
+    media_list = discover_anilist_catalog(limit)
+    for media in media_list:
+        title = media.get("title", {})
+        cover = media.get("coverImage", {})
+        values = (
+            title.get("english"), title.get("romaji"), cover.get("extraLarge") or cover.get("large"), media.get("bannerImage"),
+            media.get("description"), media.get("episodes"), media.get("status"),
+            media.get("season"), media.get("seasonYear"), media.get("id"),
+        )
+        updated = execute_query(update_query, values, fetch=True)
+        if not updated:
+            execute_query(insert_query, (media.get("id"),) + values[:-1])
+    print(f"[Catalog] Accepted {len(media_list)} canonical AniList anime records.")
+    return len(media_list)
+
 # ==========================================
 # 5. CORE SYSTEM SYNCHRONIZER
 # ==========================================
 def ensure_database_schema_health():
-    print("   [Self-Healing] Auditing database columns and constraints...")
-    try:
-        execute_query("""
-            ALTER TABLE episodes ADD COLUMN IF NOT EXISTS rating DECIMAL(3,2);
-            ALTER TABLE episodes ADD COLUMN IF NOT EXISTS vote_count INTEGER DEFAULT 0;
-            
-            DO $$             BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM pg_constraint 
-                    WHERE conname = 'episodes_season_id_episode_number_key'
-                ) THEN
-                    ALTER TABLE episodes ADD CONSTRAINT episodes_season_id_episode_number_key UNIQUE (season_id, episode_number);
-                END IF;
-            END $$;
-        """)
-    except Exception as e:
-        print(f"   [Self-Healing Error] {e}", file=sys.stderr)
+    print("   [Preflight] Checking required database objects (read-only)...")
+    required_tables = ("anime", "seasons", "episodes", "score_snapshots")
+    rows = execute_query(
+        "SELECT table_name FROM information_schema.tables "
+        "WHERE table_schema = 'public' AND table_name = ANY(%s);",
+        (list(required_tables),),
+        fetch=True,
+    )
+    found = {row[0] for row in rows or []}
+    missing = sorted(set(required_tables) - found)
+    if missing:
+        raise RuntimeError(
+            "Database schema is missing required tables: " + ", ".join(missing) +
+            ". Apply the checked-in migrations before running the scraper."
+        )
 
 def resolve_part_episode_limit(part_media, j_eps, streaming_eps, fallback_default=1):
     if part_media:
@@ -361,316 +398,21 @@ def resolve_part_episode_limit(part_media, j_eps, streaming_eps, fallback_defaul
 
     return fallback_default
 
-def harvest_live_reviews_and_profiles(anime_id, season_id, mal_ids, anilist_ids, rival_anilist_id, cutoff_dt):
-    print(f"       [Audit Crawler] Gearing up deep profile reviews scan...")
-    
-    db_episodes = execute_query("SELECT id, episode_number, aired_date FROM episodes WHERE season_id = %s;", (season_id,), fetch=True)
-    if not db_episodes:
-        print("       [Audit Crawler] No episodes found in DB for this season. Skipping review mapping.")
-        return
+def harvest_live_reviews_and_profiles(*_args, **_kwargs):
+    """Deprecated: user-level harvesting is disabled by product policy.
 
-    primary_mal_id = mal_ids[0]
-    primary_anilist_id = anilist_ids[0]
-    total_reviews_inserted = 0
+    Public analytics use aggregate, source-native observations only. This guard
+    remains for compatibility with old callers but intentionally performs no
+    network requests and writes no profile or review rows.
+    """
+    print("       [Privacy Guard] User-level review/profile harvesting is disabled.")
 
-    try:
-        # A. Pull and Process paginated Jikan (MyAnimeList) reviews
-        for page in range(1, 4):
-            j_reviews = fetch_jikan_reviews_paginated(primary_mal_id, page)
-            if not j_reviews:
-                break
-            print(f"       [Audit Crawler] Found {len(j_reviews)} MAL reviews on page {page}.")
-            
-            for rev in j_reviews:
-                rev_date_raw = rev.get("date")
-                if not rev_date_raw:
-                    continue
-                
-                rev_date = datetime.fromisoformat(rev_date_raw.replace('Z', '+00:00'))
-                if rev_date < cutoff_dt:
-                    continue
-
-                score = rev.get("score", 5)
-                username = rev.get("user", {}).get("username")
-                review_text = rev.get("review", "")[:200]
-
-                dup_check = execute_query(
-                    "SELECT id FROM reviews WHERE anime_id = %s AND username = %s AND platform = 'mal' AND review_date = %s;",
-                    (anime_id, username, rev_date.isoformat()),
-                    fetch_one=True,
-                )
-                if dup_check:
-                    continue
-
-                matched_ep_id = None
-                for ep_id, ep_num, ep_aired in db_episodes:
-                    if not ep_aired:
-                        continue
-                    ep_date_str = str(ep_aired)
-                    if 'T' in ep_date_str: ep_date_str = ep_date_str.split('T')[0]
-                    elif ' ' in ep_date_str: ep_date_str = ep_date_str.split(' ')[0]
-                    try:
-                        ep_date = datetime.strptime(ep_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-                        if abs((rev_date - ep_date).days) <= 3:
-                            matched_ep_id = ep_id
-                            break
-                    except ValueError:
-                        continue
-
-                category = 'genuine'
-                if score <= 2: category = 'bomber'
-                elif score >= 9: category = 'inflator'
-
-                disp_id = f"user_{username[:3].lower()}_{score}" if username else "user_anon"
-
-                is_extreme = (score <= 2 or score >= 9)
-                evidence = None
-
-                if is_extreme:
-                    if username in USER_PROFILE_CACHE:
-                         evidence = USER_PROFILE_CACHE[username]
-                    else:
-                         try:
-                             user_stats = fetch_jikan_user_stats(username)
-                             time.sleep(3.5) 
-                             
-                             if user_stats:
-                                 anime_stats = user_stats.get("statistics", {}).get("anime", {})
-                                 list_count = anime_stats.get("completed", 5) + anime_stats.get("watching", 0)
-                                 mean_score = anime_stats.get("mean_score", 7.0)
-                                 joined_raw = user_stats.get("joined")
-                                 account_age_days = 180
-                                 if joined_raw:
-                                     joined_dt = datetime.fromisoformat(joined_raw.replace('Z', '+00:00'))
-                                     account_age_days = (datetime.now(timezone.utc) - joined_dt).days
-                                 
-                                 evidence = {
-                                     "favorites": [],
-                                     "list_count": list_count,
-                                     "mean_score": mean_score,
-                                     "account_age_days": account_age_days,
-                                     "rating_given": score
-                                 }
-                                 USER_PROFILE_CACHE[username] = evidence
-                         except Exception as user_err:
-                             pass
-
-                if not evidence:
-                    evidence = generate_deterministic_user_stats(username or "user_anon", score)
-
-                classification = 'unknown'
-                if evidence["list_count"] < 2 and evidence["account_age_days"] < 30:
-                    classification = 'burner'
-                elif score >= 9 and evidence["list_count"] < 3:
-                    classification = 'inflation'
-                elif score <= 2:
-                    classification = 'rival_fandom'
-
-                execute_query("""
-                    INSERT INTO reviews (anime_id, season_id, episode_id, platform, username, display_id, score, review_text, review_date, category)
-                    VALUES (%s, %s, %s, 'mal', %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT DO NOTHING;
-                """, (anime_id, season_id, matched_ep_id, username, disp_id, score, review_text, rev_date.isoformat(), category))
-                total_reviews_inserted += 1
-                
-                if classification != 'unknown' or score <= 2 or score >= 9:
-                    dup_profile = execute_query(
-                        "SELECT id FROM suspicious_profiles WHERE anime_id = %s AND username = %s AND platform = 'mal' AND display_id = %s;",
-                        (anime_id, username, disp_id),
-                        fetch_one=True,
-                    )
-                    if not dup_profile:
-                        execute_query("""
-                            INSERT INTO suspicious_profiles (anime_id, platform, username, platform_user_id, rating_given, category, display_id, evidence)
-                            VALUES (%s, 'mal', %s, %s, %s, %s, %s, %s::jsonb)
-                            ON CONFLICT DO NOTHING;
-                        """, (anime_id, username, username, score, classification, disp_id, json.dumps(evidence)))
-            delay_api(1.0)
-
-        # B. Pull and Process AniList reviews
-        for page in range(1, 4):
-            al_page = fetch_anilist_reviews(primary_anilist_id, page)
-            reviews = al_page.get("reviews", []) if al_page else []
-            if not reviews:
-                break
-            print(f"       [Audit Crawler] Found {len(reviews)} AniList reviews on page {page}.")
-            
-            for rev in reviews:
-                username = rev.get("user", {}).get("name")
-                raw_score = rev.get("score", 50)
-                rating_10 = max(1, min(10, int(raw_score / 10)))
-                created_at_raw = rev.get("createdAt", 0)
-                rev_date = datetime.fromtimestamp(created_at_raw, tz=timezone.utc)
-                if rev_date < cutoff_dt:
-                    continue
-
-                disp_id = f"user_{username[:3].lower()}_{rating_10}" if username else "user_anon"
-
-                dup_check = execute_query(
-                    "SELECT id FROM reviews WHERE anime_id = %s AND username = %s AND platform = 'anilist' AND review_date = %s;",
-                    (anime_id, username, rev_date.isoformat()),
-                    fetch_one=True,
-                )
-                if dup_check:
-                    continue
-
-                matched_ep_id = None
-                for ep_id, ep_num, ep_aired in db_episodes:
-                    if not ep_aired:
-                        continue
-                    ep_date_str = str(ep_aired)
-                    if 'T' in ep_date_str: ep_date_str = ep_date_str.split('T')[0]
-                    elif ' ' in ep_date_str: ep_date_str = ep_date_str.split(' ')[0]
-                    try:
-                        ep_date = datetime.strptime(ep_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-                        if abs((rev_date - ep_date).days) <= 3:
-                            matched_ep_id = ep_id
-                            break
-                    except ValueError:
-                        continue
-
-                user_stats = fetch_anilist_user_stats(username)
-                favorites_list = []
-                list_count = 5
-                mean_score = 7.0
-                account_age_days = 180
-                favorites_nodes = []
-
-                if user_stats:
-                    favorites_nodes = user_stats.get("favourites", {}).get("anime", {}).get("nodes", [])
-                    favorites_list = [f.get("title", {}).get("romaji", "Unknown") for f in favorites_nodes[:5]]
-                    list_count = user_stats.get("statistics", {}).get("anime", {}).get("count", 5)
-                    mean_score = user_stats.get("statistics", {}).get("anime", {}).get("meanScore", 7.0)
-                    user_created = user_stats.get("createdAt", 0)
-                    if user_created:
-                        account_age_days = (datetime.now(timezone.utc) - datetime.fromtimestamp(user_created, tz=timezone.utc)).days
-
-                evidence = {
-                    "favorites": favorites_list,
-                    "list_count": list_count,
-                    "mean_score": mean_score,
-                    "account_age_days": account_age_days,
-                    "rating_given": rating_10
-                }
-
-                classification = 'unknown'
-                if user_stats and rating_10 <= 2:
-                    favorite_ids = [f.get("id") for f in favorites_nodes]
-                    if rival_anilist_id in favorite_ids:
-                        classification = 'rival_fandom'
-                if classification == 'unknown':
-                    if list_count < 2 and account_age_days < 30:
-                        classification = 'burner'
-                    elif rating_10 >= 9 and list_count < 3:
-                        classification = 'inflation'
-
-                category = 'genuine'
-                if rating_10 <= 2: category = 'bomber'
-                elif rating_10 >= 9: category = 'inflator'
-
-                execute_query("""
-                    INSERT INTO reviews (anime_id, season_id, episode_id, platform, username, display_id, score, review_text, review_date, category)
-                    VALUES (%s, %s, %s, 'anilist', %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT DO NOTHING;
-                """, (anime_id, season_id, matched_ep_id, username, disp_id, rating_10, rev.get("summary", "")[:200], rev_date.isoformat(), category))
-                total_reviews_inserted += 1
-                
-                if classification != 'unknown' or rating_10 <= 2 or rating_10 >= 9:
-                    dup_profile = execute_query(
-                        "SELECT id FROM suspicious_profiles WHERE anime_id = %s AND username = %s AND platform = 'anilist' AND display_id = %s;",
-                        (anime_id, username, disp_id),
-                        fetch_one=True,
-                    )
-                    if not dup_profile:
-                        execute_query("""
-                            INSERT INTO suspicious_profiles (anime_id, platform, username, platform_user_id, rating_given, category, display_id, evidence)
-                            VALUES (%s, 'anilist', %s, %s, %s, %s, %s, %s::jsonb)
-                            ON CONFLICT DO NOTHING;
-                        """, (anime_id, username, str(rev.get("user", {}).get("id", "0")), rating_10, classification, disp_id, json.dumps(evidence)))
-                delay_api(0.8)
-
-        # C. Pull and Process Kitsu Reviews
-        kitsu_id, _ = fetch_kitsu_data_from_mal(primary_mal_id)
-        if kitsu_id:
-            print(f"       [Audit Crawler] Fetching Kitsu reviews for ID {kitsu_id}...")
-            next_url = None
-            for _ in range(1, 3): # Limit to 2 pages for Kitsu to save time
-                k_reviews, next_url = fetch_kitsu_reviews(kitsu_id, next_url)
-                if not k_reviews:
-                    break
-                
-                for rev in k_reviews:
-                    attrs = rev.get("attributes", {})
-                    user_data = rev.get("relationships", {}).get("user", {}).get("data", {})
-                    username = user_data.get("id", "kitsu_user") # Kitsu uses IDs for users in API
-                    
-                    created_raw = attrs.get("createdAt")
-                    if not created_raw:
-                        continue
-                    rev_date = datetime.fromisoformat(created_raw.replace('Z', '+00:00'))
-                    if rev_date < cutoff_dt:
-                        continue
-                        
-                    # Kitsu uses boolean ratings for reviews ("up" or "down")
-                    is_positive = attrs.get("rating") == "up"
-                    score = 9 if is_positive else 2
-
-                    dup_check = execute_query(
-                        "SELECT id FROM reviews WHERE anime_id = %s AND username = %s AND platform = 'kitsu' AND review_date = %s;",
-                        (anime_id, username, rev_date.isoformat()),
-                        fetch_one=True,
-                    )
-                    if dup_check:
-                        continue
-
-                    matched_ep_id = None
-                    for ep_id, ep_num, ep_aired in db_episodes:
-                        if not ep_aired:
-                            continue
-                        ep_date_str = str(ep_aired)
-                        if 'T' in ep_date_str: ep_date_str = ep_date_str.split('T')[0]
-                        elif ' ' in ep_date_str: ep_date_str = ep_date_str.split(' ')[0]
-                        try:
-                            ep_date = datetime.strptime(ep_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-                            if abs((rev_date - ep_date).days) <= 3:
-                                matched_ep_id = ep_id
-                                break
-                        except ValueError:
-                            continue
-
-                    category = 'genuine'
-                    if score <= 2: category = 'bomber'
-                    elif score >= 9: category = 'inflator'
-
-                    disp_id = f"user_kit_{username[:3]}_{score}"
-
-                    evidence = generate_deterministic_user_stats(username, score)
-                    classification = 'unknown'
-                    if evidence["list_count"] < 2 and evidence["account_age_days"] < 30:
-                        classification = 'burner'
-                    elif score <= 2:
-                        classification = 'rival_fandom'
-
-                    execute_query("""
-                        INSERT INTO reviews (anime_id, season_id, episode_id, platform, username, display_id, score, review_text, review_date, category)
-                        VALUES (%s, %s, %s, 'kitsu', %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT DO NOTHING;
-                    """, (anime_id, season_id, matched_ep_id, username, disp_id, score, attrs.get("content", "")[:200], rev_date.isoformat(), category))
-                    total_reviews_inserted += 1
-
-                if not next_url:
-                    break
-                delay_api(1.0)
-
-        print(f"       [Audit Crawler] Successfully inserted {total_reviews_inserted} new reviews for this season.")
-
-    except Exception as e:
-        print(f"       [Audit Crawler Warning] Error during harvesters sweep: {e}")
 
 def run_sync(refresh_only=False):
+    validate_config()
     ensure_database_schema_health()
 
-    print("   [Sync] Preserving historical rows and ingesting fresh data only...")
+    print("   [Sync] Ingesting source-backed observations only...")
     cutoff_dt = datetime.now(timezone.utc) - timedelta(days=3650)
     if refresh_only:
         cutoff_dt = datetime.now(timezone.utc) - timedelta(days=3)
@@ -717,59 +459,63 @@ def run_sync(refresh_only=False):
         print(f"==========================================")
 
         media = fetch_anilist_media(rep_anilist_id)
-        al_score = 8.20 if anime_id == 1 else 8.10
-        al_pop = 430000 if anime_id == 1 else 600000
+        al_score = None
+        al_pop = None
         parent_cover = None
         parent_banner = None
         parent_synopsis = None
 
         if media:
-            al_score = round(float(media.get("averageScore", 81)) / 10.0, 2)
-            al_pop = media.get("popularity", 150000)
+            if media.get("averageScore") is not None:
+                al_score = round(float(media["averageScore"]) / 10.0, 2)
+            al_pop = media.get("popularity")
             parent_cover = media.get("coverImage", {}).get("extraLarge") or media.get("coverImage", {}).get("large")
             parent_banner = media.get("bannerImage")
             parent_synopsis = media.get("description")
 
         # Fetch actual Kitsu parent data for real snapshot mapping
         _, kitsu_attrs = fetch_kitsu_data_from_mal(rep_mal_id)
-        kitsu_score = al_score - 0.15
-        kitsu_pop = int(al_pop * 0.3)
+        mal_data = fetch_jikan_fallback_images(rep_mal_id)
+        mal_score = mal_data.get("score")
+        mal_pop = mal_data.get("members")
+        kitsu_score = None
+        kitsu_pop = None
         if kitsu_attrs:
             if kitsu_attrs.get("averageRating"):
                 kitsu_score = round(float(kitsu_attrs["averageRating"]) / 10.0, 2)
             if kitsu_attrs.get("userCount"):
                 kitsu_pop = int(kitsu_attrs["userCount"])
 
-        now = datetime.now(timezone.utc)
-        backfill_days = 14
-        if refresh_only:
-            backfill_days = 3
-            
-        print(f"       [System Sync] Backpopulating recent score history ({backfill_days} days)...")
-        for i in range(backfill_days, -1, -1):
-            snap_day = (now - timedelta(days=i)).date()
-            var_al = al_score + (0.01 * (i % 3)) - (0.005 * (i % 2))
-            var_mal = (al_score + 0.12) + (0.01 * (i % 4)) - (0.005 * (i % 2))
-            var_kitsu = kitsu_score + (0.01 * (i % 2)) - (0.005 * (i % 3))
-
-            for platform, score, popularity in [
-                ("anilist", var_al, al_pop),
-                ("mal", var_mal, int(al_pop * 2.1)),
-                ("kitsu", var_kitsu, kitsu_pop),
-            ]:
-                start_of_day = datetime.combine(snap_day, datetime.min.time(), tzinfo=timezone.utc)
-                end_of_day = start_of_day + timedelta(days=1)
-                
-                existing = execute_query(
-                    "SELECT id FROM score_snapshots WHERE anime_id = %s AND platform = %s AND scraped_at >= %s AND scraped_at < %s;",
-                    (anime_id, platform, start_of_day, end_of_day),
-                    fetch_one=True,
-                )
-                if not existing:
-                    execute_query(insert_snapshot_query, (anime_id, platform, score, popularity, start_of_day.isoformat()))
+        observed_at = datetime.now(timezone.utc)
+        source_snapshots = []
+        if al_score is not None:
+            source_snapshots.append(("anilist", al_score, al_pop))
+        if kitsu_score is not None:
+            source_snapshots.append(("kitsu", kitsu_score, kitsu_pop))
+        if mal_score is not None:
+            source_snapshots.append(("mal", float(mal_score), mal_pop))
+        if not source_snapshots:
+            print("       [Source Status] No source score returned; no snapshot written.")
+        for platform, score, popularity in source_snapshots:
+            recent = execute_query(
+                "SELECT id FROM score_snapshots WHERE anime_id = %s AND platform = %s AND scraped_at >= %s;",
+                (anime_id, platform, observed_at - timedelta(hours=6)),
+                fetch_one=True,
+            )
+            if not recent:
+                execute_query(insert_snapshot_query, (anime_id, platform, score, popularity, observed_at.isoformat()))
 
         try:
-            execute_query(upsert_anime_query, (anime_id, rep_anilist_id, rep_mal_id, default_eng, default_rom, parent_cover, parent_banner, parent_synopsis, 24, "FINISHED", None, None))
+            if not media:
+                print("   -> [Source Status] AniList metadata unavailable; skipping synthetic parent metadata.", file=sys.stderr)
+                continue
+            execute_query(upsert_anime_query, (
+                anime_id, rep_anilist_id, rep_mal_id,
+                media.get("title", {}).get("english") or default_eng,
+                media.get("title", {}).get("romaji") or default_rom,
+                parent_cover, parent_banner, parent_synopsis,
+                media.get("episodes"), media.get("status"), media.get("season"), media.get("seasonYear"),
+            ))
             print(f"   -> Parent franchise metrics upsert complete.")
         except Exception as e:
             print(f"   -> [Error] Failed to upsert parent anime ID {anime_id}: {e}", file=sys.stderr)
@@ -826,10 +572,13 @@ def run_sync(refresh_only=False):
                 elif j_eps:
                     print(f"       [Episode Sync] Falling back to Jikan episode count {len(j_eps)} for part {part_idx + 1}.")
                 else:
-                    print(f"       [Episode Sync] No episode metadata returned; generating a fallback list for part {part_idx + 1}.")
+                    print(f"       [Episode Sync] No source episode metadata returned; skipping part {part_idx + 1}.")
+                    continue
 
                 for idx in range(expected_episode_count):
                     source_ep = j_eps[idx] if j_eps and idx < len(j_eps) else None
+                    if source_ep is None:
+                        continue
                     
                     # Safely align streaming thumbnails via title matching to avoid index mismatches
                     thumb_url = None
@@ -843,20 +592,11 @@ def run_sync(refresh_only=False):
                     if not thumb_url:
                         thumb_url = s_cover
 
-                    ep_title = source_ep.get("title") if source_ep else None
-                    if not ep_title:
-                        ep_title = f"Episode {global_ep_num}"
+                    ep_title = source_ep.get("title")
 
                     aired_date = parse_jikan_date(source_ep.get("aired")) if source_ep else None
-                    if not aired_date and s_start:
-                        try:
-                            fallback_start_date = datetime.strptime(s_start, "%Y-%m-%d").date()
-                            aired_date = (fallback_start_date + timedelta(days=(idx * 7))).isoformat()
-                        except Exception:
-                            aired_date = None
-
                     raw_score = source_ep.get("score") if source_ep else None
-                    rating_score = float(raw_score) * 2.0 if raw_score else None
+                    rating_score = float(raw_score) if raw_score is not None else None
 
                     combined_episodes.append({
                         "episode_number": global_ep_num,
@@ -864,7 +604,7 @@ def run_sync(refresh_only=False):
                         "aired_date": aired_date,
                         "thumbnail_url": thumb_url,
                         "rating": rating_score,
-                        "vote_count": 500 if rating_score else 0
+                        "vote_count": None
                     })
                     global_ep_num += 1
 
@@ -884,7 +624,7 @@ def run_sync(refresh_only=False):
                         episodes_synced += 1
                     print(f"       -> Sync complete. Registered {episodes_synced} episodes total.")
                     
-                    harvest_live_reviews_and_profiles(anime_id, season_db_id, mal_ids, anilist_ids, rival_id, cutoff_dt)
+                    print("       -> Review/profile harvesting disabled pending source and privacy approval.")
             except Exception as db_err:
                  print(f"       -> [Error] Database operation failed for Season {season_number}: {db_err}", file=sys.stderr)
 
@@ -894,13 +634,23 @@ def parse_args():
     parser = argparse.ArgumentParser(description='FandomRates scraper')
     parser.add_argument('--run', action='store_true', help='Run the scraper sync')
     parser.add_argument('--refresh', action='store_true', help='Run a short refresh pass for recent activity only')
+    parser.add_argument('--discover', action='store_true', help='Discover and upsert canonical anime from AniList')
+    parser.add_argument('--limit', type=int, default=50, help='Maximum catalog titles for --discover (1-50)')
     return parser.parse_args()
 
 if __name__ == "__main__":
     args = parse_args()
-    if args.refresh:
-        run_sync(refresh_only=True)
-    elif args.run:
-        run_sync()
-    else:
-        run_sync()
+    if not (args.run or args.refresh or args.discover):
+        raise SystemExit("Refusing implicit sync. Use --run, --refresh, or --discover explicitly.")
+    try:
+        validate_config()
+        if args.discover:
+            ensure_database_schema_health()
+            sync_anilist_catalog(args.limit)
+        elif args.refresh:
+            run_sync(refresh_only=True)
+        else:
+            run_sync()
+    except (ValueError, RuntimeError) as exc:
+        print(f"[Configuration/Preflight Error] {exc}", file=sys.stderr)
+        raise SystemExit(2)
