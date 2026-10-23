@@ -24,7 +24,7 @@ export default function SubmitEvidencePage() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Unable to submit the request.');
       setState('success');
-      setMessage('Request received privately. Please keep the returned case reference for follow-up.');
+      setMessage(`Request received privately. Case reference: ${payload.caseReference || 'not available'}.`);
       setForm({ show: '', platform: 'AniList', notes: '', sourceUrl: '' });
     } catch (error) {
       setState('error');

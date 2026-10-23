@@ -3,7 +3,7 @@
 > SYSTEM TIMESTAMP: 2026-10-23T16:45:00+03:00
 > ENGINE VERSION: 3.0-PRECISE
 > HASH CURRENT STATE: e89f431
-> SERIALIZATION STATUS: clean committed feature state; local validation passed; pull request not yet opened for this branch
+> SERIALIZATION STATUS: feature branch PR #2 open; hostile-review hardening is locally validated and pending follow-up commit
 
 ---
 
@@ -19,11 +19,11 @@ Future business/product metrics must measure decision utility, not raw page view
 
 ### Target user personas and workflows
 
-1. Casual chooser: searches a title or shortlist, has a time/commitment goal, wants a clear spoiler-safe decision brief, and does not want to learn statistical jargon.
-2. Seasonal follower: returns for airing status, episode availability, freshness, schedule changes, and spoiler-safe context.
+1. Casual chooser: searches a title or shortlist, has a time/commitment goal, wants a clear evidence brief, and does not want to learn statistical jargon.
+2. Seasonal follower: returns for airing status, episode availability, freshness, and schedule changes; spoiler controls are future work, not a current promise.
 3. Evidence-minded fan: compares AniList, MyAnimeList-derived, Kitsu, and future permitted sources; inspects raw values, distributions, timestamps, and methodology.
 4. Completionist or reviewer: records watched/dropped outcomes and later checks whether a prediction or source disagreement was useful.
-5. Small-group chooser, pending implementation: friends privately submit candidates and constraints, receive a spoiler-safe shortlist, record the final choice, and delete/export the group record.
+5. Small-group chooser, pending implementation: friends privately submit candidates and constraints, receive a shortlist, record the final choice, and delete/export the group record; spoiler controls are a prerequisite.
 
 Primary current workflow: Home search -> title evidence page -> source-native score cards -> decision brief -> choose intent -> save/watch/drop outcome -> private watchlist. Secondary workflow: Home -> comparisons -> source snapshots/anomalies -> methodology. Correction workflow: public correction form -> server-side validation -> private provider-side review lead.
 
@@ -104,11 +104,11 @@ Every file below is classified relative to origin/main and the current working s
 ├── app/
     ├── api/
         ├── feedback/
-            └── route.ts [UNTOUCHED]
+            └── route.ts [MODIFIED]
 ├── app/
     ├── battle/
         ├── [slug]/
-            └── page.tsx [UNTOUCHED]
+            └── page.tsx [MODIFIED]
 ├── app/
     ├── battles/
         └── page.tsx [UNTOUCHED]
@@ -131,13 +131,13 @@ Every file below is classified relative to origin/main and the current working s
     └── sitemap.ts [CREATED]
 ├── app/
     ├── submit/
-        └── page.tsx [UNTOUCHED]
+        └── page.tsx [MODIFIED]
 ├── app/
     ├── watchlist/
         └── page.tsx [CREATED]
 ├── app/
     ├── why/
-        └── page.tsx [CREATED]
+        └── page.tsx [MODIFIED]
 ├── components/
     └── AnimeExplorer.tsx [MODIFIED]
 ├── components/
@@ -145,7 +145,7 @@ Every file below is classified relative to origin/main and the current working s
 ├── components/
     └── DataFreshnessBadge.tsx [UNTOUCHED]
 ├── components/
-    └── DecisionBrief.tsx [CREATED]
+    └── DecisionBrief.tsx [MODIFIED]
 ├── components/
     └── EpisodeCard.tsx [UNTOUCHED]
 ├── components/
@@ -186,6 +186,7 @@ Every file below is classified relative to origin/main and the current working s
         └── scrape.yml [UNTOUCHED]
 └── gitignore [UNTOUCHED]
 ├── lib/
+    ├── decisionLog.ts [CREATED]
     └── supabase.ts [UNTOUCHED]
 └── next-env.d.ts [UNTOUCHED]
 └── package-lock.json [UNTOUCHED]
@@ -214,7 +215,7 @@ Every file below is classified relative to origin/main and the current working s
 ├── tests/
     └── test_scraper_episode_logic.py [UNTOUCHED]
 └── tsconfig.json [UNTOUCHED]
-└── tsconfig.tsbuildinfo [UNTOUCHED]
+└── tsconfig.tsbuildinfo [GENERATED-IGNORED]
 ├── types/
     └── index.ts [UNTOUCHED]
 ├── types/
@@ -435,8 +436,8 @@ Classification: client decision-product island.
 Responsibility: interprets current title evidence for a selected goal and persists explicit local actions.
 Interfaces: DecisionBriefProps contains Anime and ScoreSnapshot[]; SavedTitle is local schema.
 State: intent, saved, outcome.
-Methods: readSaved returns guarded localStorage array; evidence computes latest source snapshots, source count, score spread, newest age; persist writes/replaces title entry and outcome.
-Constraints: typeof window guard prevents server-render failure; no automatic storage before user action; no claim of personal prediction or public rating.
+Methods: readDecisionLog returns guarded validated localStorage records; evidence computes latest source snapshots, source count, descriptive score spread, newest age; persist writes/replaces title entry and outcome.
+Constraints: state starts empty and hydrates in useEffect; no automatic storage before user action; no claim of personal prediction, confidence, or public rating.
 
 ### FILE: public/llms.txt
 Classification: public crawler/AI orientation document.
@@ -470,6 +471,15 @@ Classification: current research/product thesis artifact.
 Responsibility: records competitor findings, fan needs, authenticity constraints, API/legal constraints, ethical retention, product loops, measurable gates, and current implementation.
 Delta: newly created in this feature branch.
 
+### FILE: lib/decisionLog.ts
+Classification: browser-local decision storage boundary.
+Responsibility: validates the versioned localStorage record shape, reads/writes/upserts/removes explicit decisions, and exports JSON through a browser download.
+Structural contract: only title identity, intent, optional watched/dropped outcome, and timestamps are accepted; malformed records are discarded; storage failures return false instead of crashing the page.
+Delta: created during hostile-review remediation.
+Side effects: local persistence remains device-local and non-encrypted; this module intentionally does not imply a trained personal model.
+
+### Hostile-review remediation ledger
+The three independent critiques identified an arbitrary safe-pick heuristic, one-source misinterpretation, hydration risk, overstatements around learning/export/privacy/spoiler safety, false-success scraper exits, battle outage masking, and a missing correction case reference. The follow-up changes remove the lower-uncertainty claim, use a descriptive spread statement, hydrate local decisions in an effect, validate and export/delete local records, state device-local limits, make scraper database failures non-zero, throw battle query errors into the route boundary, return a correction reference, and synchronize copy with the current pilot scope. Spoiler-safe UI remains deferred rather than claimed as shipped.
 ---
 
 ## 8. STRATEGIC RUNWAY

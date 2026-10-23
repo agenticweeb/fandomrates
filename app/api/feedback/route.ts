@@ -16,6 +16,7 @@ export async function POST(request: Request) {
 
     const webhookUrl = process.env.DISCORD_FEEDBACK_WEBHOOK;
     if (!webhookUrl) return NextResponse.json({ error: 'Private review intake is temporarily unavailable. Please try again later.' }, { status: 503 });
+    const caseReference = `FR-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
     const response = await fetch(webhookUrl, {
       method: 'POST',
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
           description: 'Review this lead as unverified input. Do not publish identifiers or mobilize users.',
           color: 3447003,
           fields: [
+            { name: 'Case reference', value: caseReference, inline: true },
             { name: 'Anime', value: show, inline: true },
             { name: 'Source', value: platform, inline: true },
             { name: 'Details', value: notes },
@@ -35,7 +37,7 @@ export async function POST(request: Request) {
       }),
     });
     if (!response.ok) return NextResponse.json({ error: 'The private review queue could not accept this request.' }, { status: 502 });
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, caseReference });
   } catch {
     return NextResponse.json({ error: 'Invalid request.' }, { status: 400 });
   }

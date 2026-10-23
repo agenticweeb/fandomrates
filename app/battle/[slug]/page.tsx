@@ -16,7 +16,7 @@ interface BattlePageProps {
 }
 
 async function getBattleData(slug: string) {
-  const { data: battle } = await supabase
+  const battleResult = await supabase
     .from('battles')
     .select(`
       id, slug, is_active, anime_a_id, anime_b_id,
@@ -24,7 +24,9 @@ async function getBattleData(slug: string) {
       anime_b:anime_b_id(*)
     `)
     .eq('slug', slug)
-    .single() as { data: Battle | null };
+    .single();
+  if (battleResult.error && battleResult.error.code !== 'PGRST116') throw new Error(`Battle data unavailable: ${battleResult.error.message}`);
+  const battle = battleResult.data as Battle | null;
 
   if (!battle || !battle.anime_a || !battle.anime_b) {
     return { battle: null, chartData: [], anomalies: [], seasonsA: [], seasonsB: [], epsDataA: [], epsDataB: [], reviewsList: [] };
@@ -33,44 +35,54 @@ async function getBattleData(slug: string) {
   const idA = battle.anime_a_id;
   const idB = battle.anime_b_id;
 
-  const { data: seasons } = await supabase
+  const seasonsResult = await supabase
     .from('seasons')
     .select('*')
     .in('anime_id', [idA, idB])
-    .order('season_number', { ascending: true }) as { data: Season[] | null };
+    .order('season_number', { ascending: true });
+  if (seasonsResult.error) throw new Error(`Season evidence unavailable: ${seasonsResult.error.message}`);
+  const seasons = seasonsResult.data as Season[] | null;
 
   const seasonsA = seasons?.filter(s => s.anime_id === idA) || [];
   const seasonsB = seasons?.filter(s => s.anime_id === idB) || [];
 
-  const { data: episodes } = await supabase
+  const episodesResult = await supabase
     .from('episodes')
     .select('*')
-    .in('anime_id', [idA, idB]) as { data: Episode[] | null };
+    .in('anime_id', [idA, idB]);
+  if (episodesResult.error) throw new Error(`Episode evidence unavailable: ${episodesResult.error.message}`);
+  const episodes = episodesResult.data as Episode[] | null;
 
   const epsDataA = episodes?.filter(e => e.anime_id === idA) || [];
   const epsDataB = episodes?.filter(e => e.anime_id === idB) || [];
 
-  const { data: reviews } = await supabase
+  const reviewsResult = await supabase
     .from('reviews')
     .select('*')
     .in('anime_id', [idA, idB])
-    .order('review_date', { ascending: false }) as { data: Review[] | null };
+    .order('review_date', { ascending: false });
+  if (reviewsResult.error) throw new Error(`Review evidence unavailable: ${reviewsResult.error.message}`);
+  const reviews = reviewsResult.data as Review[] | null;
 
   const reviewsList = reviews || [];
 
-  const { data: snapshots } = await supabase
+  const snapshotsResult = await supabase
     .from('score_snapshots')
     .select('*')
     .in('anime_id', [idA, idB])
-    .order('scraped_at', { ascending: true }) as { data: ScoreSnapshot[] | null };
+    .order('scraped_at', { ascending: true });
+  if (snapshotsResult.error) throw new Error(`Score evidence unavailable: ${snapshotsResult.error.message}`);
+  const snapshots = snapshotsResult.data as ScoreSnapshot[] | null;
 
   const snapData = snapshots || [];
 
-  const { data: anomalies } = await supabase
+  const anomaliesResult = await supabase
     .from('anomaly_events')
     .select('*')
     .in('anime_id', [idA, idB])
-    .order('detected_at', { ascending: false }) as { data: AnomalyEvent[] | null };
+    .order('detected_at', { ascending: false });
+  if (anomaliesResult.error) throw new Error(`Anomaly evidence unavailable: ${anomaliesResult.error.message}`);
+  const anomalies = anomaliesResult.data as AnomalyEvent[] | null;
 
   const chartDataMap: { [date: string]: any } = {};
   snapData.forEach((snap) => {

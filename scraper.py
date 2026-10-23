@@ -471,6 +471,7 @@ def run_sync(refresh_only=False, sync_episodes=False):
     VALUES (%s, %s, %s, %s, %s);
     """
 
+    sync_failures = 0
     for franchise in MAPPINGS:
         anime_id = franchise["anime_id"]
         default_eng = franchise["title_english"]
@@ -544,6 +545,7 @@ def run_sync(refresh_only=False, sync_episodes=False):
             ))
             print(f"   -> Parent franchise metrics upsert complete.")
         except Exception as e:
+            sync_failures += 1
             print(f"   -> [Error] Failed to upsert parent anime ID {anime_id}: {e}", file=sys.stderr)
             continue
 
@@ -655,8 +657,11 @@ def run_sync(refresh_only=False, sync_episodes=False):
                     
                     print("       -> Review/profile harvesting disabled pending source and privacy approval.")
             except Exception as db_err:
+                 sync_failures += 1
                  print(f"       -> [Error] Database operation failed for Season {season_number}: {db_err}", file=sys.stderr)
 
+    if sync_failures:
+        raise RuntimeError(f"Synchronization completed with {sync_failures} database failure(s); refusing a false-success exit.")
     print("\nSynchronization task finished.")
 
 def parse_args():
