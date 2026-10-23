@@ -34,39 +34,15 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
     show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } }
   };
 
-  const getPlatformAverage = (animeId: number) => {
-    const subset = snapshots.filter(s => s.anime_id === animeId);
-    const platforms = ['anilist', 'mal', 'kitsu'];
-    
-    let totalLatestSum = 0;
-    let totalLatestCount = 0;
-    let totalPrevSum = 0;
-    let totalPrevCount = 0;
-
-    platforms.forEach((p) => {
-      const platformSnaps = subset
-        .filter(s => s.platform === p)
-        .sort((a, b) => new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime());
-
-      if (platformSnaps.length > 0) {
-        totalLatestSum += Number(platformSnaps[0].score ?? 0);
-        totalLatestCount++;
-
-        if (platformSnaps.length > 1) {
-          totalPrevSum += Number(platformSnaps[1].score ?? 0);
-          totalPrevCount++;
-        } else {
-          totalPrevSum += Number(platformSnaps[0].score ?? 0);
-          totalPrevCount++;
-        }
-      }
-    });
-
-    const currentAvg = totalLatestCount > 0 ? totalLatestSum / totalLatestCount : null;
-    const prevAvg = totalPrevCount > 0 ? totalPrevSum / totalPrevCount : null;
-    const delta = currentAvg !== null && prevAvg !== null ? currentAvg - prevAvg : null;
-
-    return { currentAvg, delta };
+  const getLatestByPlatform = (animeId: number) => {
+    const latest = new Map<string, ScoreSnapshot>();
+    snapshots
+      .filter((snapshot) => snapshot.anime_id === animeId && snapshot.score !== null)
+      .sort((a, b) => new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime())
+      .forEach((snapshot) => {
+        if (!latest.has(snapshot.platform)) latest.set(snapshot.platform, snapshot);
+      });
+    return latest;
   };
 
   return (
@@ -101,7 +77,7 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
 
       {/* Active Battle Cards */}
       <section className="space-y-6">
-        <h2 className="text-2xl font-black uppercase tracking-wider text-text-primary">Tracked Campaigns</h2>
+        <h2 className="text-2xl font-black uppercase tracking-wider text-text-primary">Featured comparisons</h2>
 
         <div className="grid grid-cols-1 gap-8">
           {battles.map((battle) => {
@@ -109,8 +85,8 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
             const animeB = battle.anime_b;
             if (!animeA || !animeB) return null;
 
-            const statsA = getPlatformAverage(animeA.id);
-            const statsB = getPlatformAverage(animeB.id);
+            const statsA = getLatestByPlatform(animeA.id);
+            const statsB = getLatestByPlatform(animeB.id);
 
             return (
               <motion.div 
@@ -143,12 +119,11 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
                       </span>
                       <h3 className="font-extrabold text-xl text-text-primary transition-colors">{animeA.title_english}</h3>
                       <div className="flex flex-wrap gap-4 justify-center sm:justify-start font-mono font-black text-sm pt-2">
-                        <div className="text-center sm:text-left rounded-lg border border-border bg-background/70 px-3 py-2">
-                          <span className="text-[10px] text-text-secondary block font-bold uppercase tracking-widest">Platform Average</span>
-                          <span className="text-lg text-accent-cyan">{statsA.currentAvg === null ? 'Unavailable' : `${statsA.currentAvg.toFixed(2)} / 10`}</span>
-                          <span className="mt-1 block text-[10px] text-text-secondary">
-                            {statsA.delta === null ? 'No comparable prior observation' : `${statsA.delta >= 0 ? '+' : ''}${statsA.delta.toFixed(2)} vs prior`}
-                          </span>
+                        <div className="grid grid-cols-3 gap-2 rounded-lg border border-border bg-background/70 px-3 py-2">
+                          {['anilist', 'mal', 'kitsu'].map((platform) => {
+                            const snapshot = statsA.get(platform);
+                            return <div key={platform}><span className="block text-[9px] font-bold uppercase tracking-widest text-text-secondary">{platform === 'anilist' ? 'AniList' : platform.toUpperCase()}</span><span className="text-sm text-accent-cyan">{snapshot?.score === null || !snapshot ? '—' : snapshot.score.toFixed(2)}</span></div>;
+                          })}
                         </div>
                       </div>
                     </div>
@@ -178,12 +153,11 @@ export default function DashboardContainer({ battles, anomalies, snapshots }: Da
                       </span>
                       <h3 className="font-extrabold text-xl text-text-primary transition-colors">{animeB.title_english}</h3>
                       <div className="flex flex-wrap gap-4 justify-center sm:justify-end font-mono font-black text-sm pt-2">
-                        <div className="rounded-lg border border-border bg-background/70 px-3 py-2 text-center sm:text-right">
-                          <span className="text-[10px] text-text-secondary block font-bold uppercase tracking-widest">Platform Average</span>
-                          <span className="text-lg text-accent-cyan">{statsB.currentAvg === null ? 'Unavailable' : `${statsB.currentAvg.toFixed(2)} / 10`}</span>
-                          <span className="mt-1 block text-[10px] text-text-secondary">
-                            {statsB.delta === null ? 'No comparable prior observation' : `${statsB.delta >= 0 ? '+' : ''}${statsB.delta.toFixed(2)} vs prior`}
-                          </span>
+                        <div className="grid grid-cols-3 gap-2 rounded-lg border border-border bg-background/70 px-3 py-2 text-center sm:text-right">
+                          {['anilist', 'mal', 'kitsu'].map((platform) => {
+                            const snapshot = statsB.get(platform);
+                            return <div key={platform}><span className="block text-[9px] font-bold uppercase tracking-widest text-text-secondary">{platform === 'anilist' ? 'AniList' : platform.toUpperCase()}</span><span className="text-sm text-accent-cyan">{snapshot?.score === null || !snapshot ? '—' : snapshot.score.toFixed(2)}</span></div>;
+                          })}
                         </div>
                       </div>
                     </div>
