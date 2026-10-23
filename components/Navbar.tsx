@@ -33,6 +33,8 @@ export default function Navbar() {
         {/* Desktop Navigation Links */}
         <nav className="hidden md:flex items-center gap-8 text-xs font-black uppercase tracking-wider text-text-secondary">
           <Link href="/" className="hover:text-text-primary transition-colors">Rating explorer</Link>
+          <Link href="/why" className="hover:text-text-primary transition-colors">Why this exists</Link>
+          <Link href="/watchlist" className="hover:text-text-primary transition-colors">My decisions</Link>
           <Link href="/battles" className="hover:text-text-primary transition-colors">Comparisons</Link>
           <Link href="/methodology" className="hover:text-text-primary transition-colors">Methodology</Link>
           <Link href="/submit" className="hover:text-text-primary transition-colors">Corrections</Link>
@@ -69,6 +71,8 @@ export default function Navbar() {
               >
                 Rating explorer
               </Link>
+              <Link href="/why" onClick={() => setIsOpen(false)} className="py-2 hover:text-text-primary transition-colors border-b border-border/40">Why this exists</Link>
+              <Link href="/watchlist" onClick={() => setIsOpen(false)} className="py-2 hover:text-text-primary transition-colors border-b border-border/40">My decisions</Link>
               <Link 
                 href="/battles" 
                 onClick={() => setIsOpen(false)}

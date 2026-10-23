@@ -1,11 +1,13 @@
 # FandomRates
 
-FandomRates is an evidence-first anime rating explorer. It helps people understand why source ratings differ instead of declaring one universal or “true” score.
+FandomRates is an evidence-first anime decision layer. It helps people choose what to watch for a specific situation by explaining why source ratings differ, how fresh and complete the evidence is, and what trade-offs are visible. It is not a replacement tracker or a universal score.
 
 ## What the site contains
 
 - `/`: searchable anime catalog with source-separated score cards.
 - `/anime/{id}`: title evidence page with source-native observations, timestamps, coverage context, and limitations.
+- `/why`: the product thesis and the reasons to use FandomRates alongside the original sources.
+- `/watchlist`: a private browser-local decision log for saved titles and watched/dropped outcomes.
 - `/battles`: comparison index for curated title comparisons.
 - `/methodology`: definitions, provenance rules, uncertainty, and non-claims.
 

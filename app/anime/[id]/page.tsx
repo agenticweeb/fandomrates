@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { supabase } from '@/lib/supabase';
 import { Anime, ScoreSnapshot } from '@/types';
+import DecisionBrief from '@/components/DecisionBrief';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,6 +55,8 @@ export default async function AnimeEvidencePage({ params }: { params: { id: stri
         </div>
         {anime.synopsis && <p className="mt-8 max-w-4xl text-sm leading-7 text-text-secondary">{anime.synopsis}</p>}
       </header>
+
+      <DecisionBrief anime={anime} snapshots={snapshots || []} />
 
       <section className="space-y-4" aria-labelledby="source-ratings-heading">
         <div>
