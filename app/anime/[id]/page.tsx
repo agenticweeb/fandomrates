@@ -1,9 +1,21 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import type { Metadata } from 'next';
 import { supabase } from '@/lib/supabase';
 import { Anime, ScoreSnapshot } from '@/types';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
+  const animeId = Number(params.id);
+  if (!Number.isInteger(animeId)) return { title: 'Anime evidence not found | FandomRates', robots: { index: false, follow: false } };
+  const { data } = await supabase.from('anime').select('title_english, title_romaji, synopsis').eq('id', animeId).maybeSingle();
+  if (!data) return { title: 'Anime evidence not found | FandomRates', robots: { index: false, follow: false } };
+  const title = data.title_english || data.title_romaji || 'Anime';
+  const description = `See ${title} source ratings, score history, freshness, and evidence context across anime platforms.`;
+  const origin = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '');
+  return { title: `${title} rating history and evidence | FandomRates`, description, ...(origin ? { alternates: { canonical: `${origin}/anime/${animeId}` }, openGraph: { title, description, url: `${origin}/anime/${animeId}`, type: 'article' } } : {}) };
+}
 
 export default async function AnimeEvidencePage({ params }: { params: { id: string } }) {
   const animeId = Number(params.id);
