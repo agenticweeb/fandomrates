@@ -1,0 +1,42 @@
+name: FandomRates Catalog Backfill
+
+on:
+  schedule:
+    - cron: '15 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  catalog-backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    concurrency:
+      group: fandomrates-catalog-backfill-production
+      cancel-in-progress: false
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Backfill bounded AniList popularity pages
+        env:
+          FANDOMRATES_ENV: production
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_SSLMODE: require
+        run: |
+          set -euo pipefail
+          for page in 2 3 4 5 6 7 8 9 10; do
+            python scraper.py --discover --catalog-scores --limit 50 --page "$page"
+          done
