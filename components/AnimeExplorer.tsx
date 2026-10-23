@@ -6,6 +6,7 @@ interface AnimeExplorerProps {
   snapshots: ScoreSnapshot[];
   query: string;
   total: number | null;
+  warnings: string[];
 }
 
 const platforms = ['anilist', 'mal', 'kitsu'] as const;
@@ -23,7 +24,7 @@ function scoreLabel(snapshot?: ScoreSnapshot) {
   return `${snapshot.score.toFixed(2)} / 10`;
 }
 
-export default function AnimeExplorer({ anime, snapshots, query, total }: AnimeExplorerProps) {
+export default function AnimeExplorer({ anime, snapshots, query, total, warnings }: AnimeExplorerProps) {
   const snapshotsByAnime = new Map<number, ScoreSnapshot[]>();
   for (const snapshot of snapshots) {
     const rows = snapshotsByAnime.get(snapshot.anime_id) || [];
@@ -71,6 +72,8 @@ export default function AnimeExplorer({ anime, snapshots, query, total }: AnimeE
         </div>
         <Link href="/methodology" className="hidden text-sm font-semibold text-accent-cyan hover:underline sm:block">How evidence works →</Link>
       </div>
+
+      {warnings.length > 0 && <div role="status" className="rounded-2xl border border-accent-cyan/30 bg-accent-cyan/10 p-4 text-sm leading-6 text-text-secondary"><strong className="text-text-primary">Some evidence is temporarily unavailable.</strong><ul className="mt-1 list-disc pl-5">{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}
 
       {anime.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-surface p-8 text-center">
