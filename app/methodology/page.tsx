@@ -1,174 +1,51 @@
-"use client";
-
-import React, { useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import Link from 'next/link';
 
 export default function MethodologyPage() {
-  const [loading, setLoading] = useState<string | null>(null);
-
-  const handleExport = async (table: string, format: 'csv' | 'json') => {
-    setLoading(`${table}-${format}`);
-    try {
-      const { data, error } = await supabase.from(table).select('*');
-      if (error) throw error;
-
-      let fileContent = '';
-      let mimeType = '';
-      let fileExtension = '';
-
-      if (format === 'json') {
-        fileContent = JSON.stringify(data, null, 2);
-        mimeType = 'application/json';
-        fileExtension = 'json';
-      } else {
-        if (data && data.length > 0) {
-          const headers = Object.keys(data[0]);
-          const csvRows = [headers.join(',')];
-          for (const row of data) {
-            const values = headers.map(header => {
-              const val = row[header];
-              const escaped = ('' + (val ?? '')).replace(/"/g, '""');
-              return `"${escaped}"`;
-            });
-            csvRows.push(values.join(','));
-          }
-          fileContent = csvRows.join('\n');
-        }
-        mimeType = 'text/csv';
-        fileExtension = 'csv';
-      }
-
-      const blob = new Blob([fileContent], { type: mimeType });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `fandomrates_${table}_export.${fileExtension}`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (e: any) {
-      alert(`Export Failed: ${e.message}`);
-    } finally {
-      setLoading(null);
-    }
-  };
-
   return (
-    <div className="max-w-4xl mx-auto space-y-12 py-12">
-      <div className="space-y-4">
-        <h1 className="text-4xl font-black text-text-primary uppercase tracking-tight">
-          Systems Audits & Transparency Metrics
-        </h1>
-        <p className="text-base text-text-secondary leading-relaxed font-semibold">
-          We show our work. Download the raw data, check our math, tell us where we're wrong. That's the point.
-        </p>
-      </div>
-
-      {/* CSV/JSON Download Card */}
-      <section className="p-6 border border-border rounded-2xl bg-surface space-y-6">
-        <div>
-          <h3 className="text-lg font-black text-text-primary uppercase tracking-wider">Don't trust us? Good.</h3>
-          <p className="text-xs text-text-secondary mt-1">
-            Download everything. CSV. JSON. Whatever you need. No account, no gatekeeping.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Table Box 1 */}
-          <div className="p-4 rounded-xl border border-border bg-background space-y-4 flex flex-col justify-between">
-            <div>
-              <h4 className="font-extrabold text-sm text-text-primary uppercase">Scoring snaps</h4>
-              <p className="text-[11px] text-text-secondary mt-1">Platform averages snap records histories.</p>
-            </div>
-            <div className="flex gap-2">
-              <button 
-                disabled={loading !== null}
-                onClick={() => handleExport('score_snapshots', 'csv')}
-                className="flex-1 py-2 text-[10px] font-black uppercase tracking-wider bg-surface border border-border hover:border-text-secondary rounded text-text-primary disabled:opacity-50"
-              >
-                Score History (CSV)
-              </button>
-            </div>
-          </div>
-
-          {/* Table Box 2 */}
-          <div className="p-4 rounded-xl border border-border bg-background space-y-4 flex flex-col justify-between">
-            <div>
-              <h4 className="font-extrabold text-sm text-text-primary uppercase">Flagged profiles</h4>
-              <p className="text-[11px] text-text-secondary mt-1">Behavioral profiles flagged under audits.</p>
-            </div>
-            <div className="flex gap-2">
-              <button 
-                disabled={loading !== null}
-                onClick={() => handleExport('suspicious_profiles', 'csv')}
-                className="flex-1 py-2 text-[10px] font-black uppercase tracking-wider bg-surface border border-border hover:border-text-secondary rounded text-text-primary disabled:opacity-50"
-              >
-                Flagged Users (CSV)
-              </button>
-            </div>
-          </div>
-
-          {/* Table Box 3 */}
-          <div className="p-4 rounded-xl border border-border bg-background space-y-4 flex flex-col justify-between">
-            <div>
-              <h4 className="font-extrabold text-sm text-text-primary uppercase">Anomalies log</h4>
-              <p className="text-[11px] text-text-secondary mt-1">Historical score drop/spike timelines.</p>
-            </div>
-            <div className="flex gap-2">
-              <button 
-                disabled={loading !== null}
-                onClick={() => handleExport('anomaly_events', 'csv')}
-                className="flex-1 py-2 text-[10px] font-black uppercase tracking-wider bg-surface border border-border hover:border-text-secondary rounded text-text-primary disabled:opacity-50"
-              >
-                Anomaly Events (CSV)
-              </button>
-            </div>
-          </div>
-        </div>
+    <div className="mx-auto max-w-5xl space-y-12 py-12">
+      <header className="space-y-4">
+        <p className="text-xs font-black uppercase tracking-[0.25em] text-accent-cyan">How FandomRates works</p>
+        <h1 className="text-4xl font-black tracking-tight text-text-primary md:text-5xl">Evidence before verdicts.</h1>
+        <p className="max-w-3xl text-base leading-7 text-text-secondary">FandomRates is a source-transparency tool for understanding why anime ratings disagree. We preserve the source, time, scale, coverage, and limitations instead of manufacturing a single “real” score.</p>
+      </header>
+      <section className="grid gap-4 md:grid-cols-2" aria-labelledby="states-heading">
+        <h2 id="states-heading" className="sr-only">Data states</h2>
+        {[
+          ['Observed', 'Returned directly by a named source during the displayed collection window.'],
+          ['Calculated', 'Reproducible arithmetic over observed values, with the inputs and formula disclosed.'],
+          ['Signal', 'A statistical pattern that deserves inspection. It is not proof of intent or identity.'],
+          ['Unavailable', 'The source did not provide a permitted or reliable value. Unavailable is not zero.'],
+          ['Stale', 'The last accepted observation is older than the published freshness target.'],
+          ['Not comparable', 'Two values differ in scale, population, eligibility, timing, or meaning.'],
+        ].map(([label, description]) => (
+          <article key={label} className="rounded-2xl border border-border bg-surface p-5">
+            <h3 className="font-black text-text-primary">{label}</h3>
+            <p className="mt-2 text-sm leading-6 text-text-secondary">{description}</p>
+          </article>
+        ))}
       </section>
-
-      {/* Technical definitions explained */}
-      <section className="space-y-4 border-l-2 border-accent-gold pl-6">
-        <h3 className="text-lg font-black text-text-primary uppercase tracking-widest">1. We show you the pattern. You decide what it means.</h3>
-        <p className="text-sm text-text-secondary leading-relaxed">
-          We can't see who rated what episode. No API gives us that. What we CAN see: when the score moved, and what reviews showed up right after. It's not proof — it's a pattern. You decide what it means.
-          <br /><br />
-          When we flag an episode, we're saying: "Something happened here." Maybe it's a bad episode. Maybe it's a campaign. We show you the when, the who, and the what. The why is yours to figure out.
-        </p>
+      <section className="space-y-5 rounded-2xl border border-border bg-surface p-6 md:p-8">
+        <h2 className="text-2xl font-black text-text-primary">What a source-native rating means</h2>
+        <p className="text-sm leading-7 text-text-secondary">Each rating card should identify the platform, its native scale, the available count or popularity measure, the observation timestamp, and the collection run. Platforms may use different populations, prompts, moderation, rounding, and update schedules, so FandomRates keeps their values separate.</p>
+        <p className="text-sm leading-7 text-text-secondary">A time-series change can be useful context, but a change can also reflect a premiere, finale, controversy, policy update, source outage, or delayed cache. We show alternatives and uncertainty before describing a pattern as unusual.</p>
       </section>
-
-      {/* Classifications */}
-      <section className="space-y-6">
-        <h3 className="text-lg font-black text-text-primary uppercase tracking-widest">2. Classifier Definitions</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="p-5 border border-border rounded-xl bg-surface space-y-2">
-            <h4 className="font-extrabold text-accent-gold text-sm uppercase">Rival Fan Hit</h4>
-            <p className="text-xs text-text-secondary leading-relaxed">
-              Gave it a 1/10. Their favorites list is basically a shrine to the other show. Draw your own conclusions.
-            </p>
-          </div>
-
-          <div className="p-5 border border-border rounded-xl bg-surface space-y-2">
-            <h4 className="font-extrabold text-accent-gold text-sm uppercase">Fresh Accounts</h4>
-            <p className="text-xs text-text-secondary leading-relaxed">
-              Account made last week. Rated one show: this one. Gave it a 1/10 or a 10/10. Nothing else on their list. Suspicious? You tell us.
-            </p>
-          </div>
-
-          <div className="p-5 border border-border rounded-xl bg-surface space-y-2">
-            <h4 className="font-extrabold text-accent-gold text-sm uppercase">The Extremist</h4>
-            <p className="text-xs text-text-secondary leading-relaxed">
-              Only gives 1s and 10s. No nuance, no middle ground. Either everything is trash or everything is a masterpiece.
-            </p>
-          </div>
-
-          <div className="p-5 border border-border rounded-xl bg-surface space-y-2">
-            <h4 className="font-extrabold text-accent-gold text-sm uppercase">The Stan</h4>
-            <p className="text-xs text-text-secondary leading-relaxed">
-              Gave it a 10/10. Their list has 3 shows total. All 10s. All from the same franchise. Not a critic — a cheerleader.
-            </p>
-          </div>
-        </div>
+      <section className="space-y-5 rounded-2xl border border-border bg-surface p-6 md:p-8">
+        <h2 className="text-2xl font-black text-text-primary">What we do not claim</h2>
+        <ul className="space-y-3 text-sm leading-7 text-text-secondary">
+          <li>We do not identify individual fans, infer motives, or label people as bots, sockpuppets, “bombers,” or “glazers.”</li>
+          <li>We do not treat a score spike, extreme rating, shared language, or new account as proof of manipulation.</li>
+          <li>We do not estimate missing scores, invent historical observations, or silently blend incompatible platforms.</li>
+          <li>We do not publish raw usernames, platform IDs, private messages, or target lists through the public product.</li>
+        </ul>
+      </section>
+      <section className="space-y-5 rounded-2xl border border-border bg-background/50 p-6 md:p-8">
+        <h2 className="text-2xl font-black text-text-primary">Source and retention limits</h2>
+        <p className="text-sm leading-7 text-text-secondary">API access is not automatically permission to build a public mirror. Before enabling a source, we verify its endpoint rules, rate limits, attribution, storage and redistribution rights, deletion behavior, commercial terms, and user-data restrictions. If a source is unavailable or its permission is unclear, the interface says so.</p>
+        <p className="text-sm leading-7 text-text-secondary">Historical charts begin with accepted observations collected by FandomRates. We do not backfill history by varying a current score or copying a value from another platform.</p>
+      </section>
+      <section className="flex flex-col gap-4 rounded-2xl border border-accent-cyan/30 bg-accent-cyan/5 p-6 md:flex-row md:items-center md:justify-between">
+        <div><h2 className="font-black text-text-primary">Found a data problem?</h2><p className="mt-1 text-sm text-text-secondary">Send a private correction request with the source link and context. Reports are leads for review, not public accusations.</p></div>
+        <Link href="/submit" className="inline-flex min-h-11 items-center justify-center rounded-lg bg-text-primary px-5 py-3 text-xs font-black uppercase tracking-wider text-background focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-cyan">Request correction</Link>
       </section>
     </div>
   );

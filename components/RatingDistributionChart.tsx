@@ -18,7 +18,6 @@ interface RatingDistributionChartProps {
   seasons: Season[];
   episodes: Episode[];
   reviews: Review[];
-  fallbackOverall: { rating: string; count: number }[];
 }
 
 export default function RatingDistributionChart({ 
@@ -26,8 +25,7 @@ export default function RatingDistributionChart({
   accentColor, 
   seasons, 
   episodes, 
-  reviews,
-  fallbackOverall
+  reviews
 }: RatingDistributionChartProps) {
   const [scope, setScope] = useState<'overall' | 'season' | 'episode'>('overall');
   const [selectedSeasonId, setSelectedSeasonId] = useState<number>(0);
@@ -75,35 +73,10 @@ export default function RatingDistributionChart({
     });
 
     const hasRealData = counts.some(c => c.count > 0);
-    if (hasRealData) return counts;
+    return hasRealData ? counts : [];
+  }, [scope, selectedSeasonId, selectedEpisodeId, reviews]);
 
-    if (scope === 'overall') return fallbackOverall;
-
-    if (scope === 'season') {
-      const activeS = seasons.find(s => s.id === selectedSeasonId);
-      const mult = (activeS?.season_number ?? 1) === 3 ? 0.75 : 0.45;
-      return fallbackOverall.map(item => ({
-        rating: item.rating,
-        count: Math.round(item.count * mult)
-      }));
-    }
-
-    const activeEp = episodes.find(e => e.id === selectedEpisodeId);
-    const isFirstEp = (activeEp?.episode_number ?? 1) === 1;
-
-    return Array.from({ length: 10 }, (_, i) => {
-      const scoreVal = i + 1;
-      let count = 45;
-      if (isFirstEp) {
-        if (scoreVal === 1) count = 740;
-        else if (scoreVal === 10) count = 520;
-        else if (scoreVal >= 8) count = 120;
-      } else {
-        count = scoreVal >= 8 ? 310 : 25;
-      }
-      return { rating: scoreVal.toString(), count };
-    });
-  }, [scope, selectedSeasonId, selectedEpisodeId, reviews, fallbackOverall, seasons, episodes]);
+  const hasObservedData = distributionData.some(point => point.count > 0);
 
   return (
     <div className="border border-border rounded-xl bg-surface p-6 space-y-4">
@@ -172,7 +145,14 @@ export default function RatingDistributionChart({
         )}
       </div>
 
-      <div className="h-48 w-full">
+      {!hasObservedData ? (
+        <div className="flex min-h-48 items-center justify-center rounded-lg border border-dashed border-border bg-background/40 p-6 text-center">
+          <div>
+            <p className="text-sm font-semibold text-text-primary">No observed rating distribution</p>
+            <p className="mt-1 text-xs text-text-secondary">This source did not provide enough permitted review data for this view. No values are estimated.</p>
+          </div>
+        </div>
+      ) : <div className="h-48 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={distributionData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <CartesianGrid stroke="#1f1f2e" strokeDasharray="3 3" vertical={false} />
@@ -191,11 +171,11 @@ export default function RatingDistributionChart({
             <Bar dataKey="count" fill={accentColor} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
-      </div>
+      </div>}
 
       <div className="flex justify-between text-[10px] text-text-secondary font-mono border-t border-border/40 pt-2">
-        <span>← Coordinated Sabotage (1/10)</span>
-        <span>Coordinated Inflation (10/10) →</span>
+        <span>← Lower ratings</span>
+        <span>Higher ratings →</span>
       </div>
     </div>
   );

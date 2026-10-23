@@ -5,7 +5,7 @@ import Navbar from '@/components/Navbar';
 
 export const metadata: Metadata = {
   title: 'FandomRates — Anime Rating Integrity Dashboard',
-  description: 'Tracking platform scoring manipulations, anomalies, and review bombs.',
+  description: 'Explore source-native anime ratings, coverage, changes, and uncertainty without fabricated history or unsupported accusations.',
 };
 
 export default function RootLayout({

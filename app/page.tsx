@@ -1,7 +1,8 @@
 import React from 'react';
 import { supabase } from '@/lib/supabase';
-import { Battle, AnomalyEvent, ScoreSnapshot } from '@/types';
+import { Anime, Battle, AnomalyEvent, ScoreSnapshot } from '@/types';
 import DashboardContainer from '@/components/DashboardContainer';
+import AnimeExplorer from '@/components/AnimeExplorer';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,11 +31,21 @@ async function getDashboardData() {
     .select('scraped_at, score, platform, anime_id')
     .order('scraped_at', { ascending: true }) as { data: ScoreSnapshot[] | null };
 
-  return { battles: battles || [], anomalies: anomalies || [], snapshots: snapshots || [] };
+  const { data: anime } = await supabase
+    .from('anime')
+    .select('*')
+    .order('title_english', { ascending: true }) as { data: Anime[] | null };
+
+  return { battles: battles || [], anomalies: anomalies || [], snapshots: snapshots || [], anime: anime || [] };
 }
 
 export default async function DashboardPage() {
-  const { battles, anomalies, snapshots } = await getDashboardData();
+  const { battles, anomalies, snapshots, anime } = await getDashboardData();
 
-  return <DashboardContainer battles={battles} anomalies={anomalies} snapshots={snapshots} />;
+  return (
+    <div className="space-y-12">
+      <AnimeExplorer anime={anime} />
+      <DashboardContainer battles={battles} anomalies={anomalies} snapshots={snapshots} />
+    </div>
+  );
 }

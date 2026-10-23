@@ -1,8 +1,6 @@
 # Dependencies
 node_modules/
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
+# Keep package-lock.json committed for reproducible CI and Vercel builds.
 
 # Next.js build output
 .next/
