@@ -247,7 +247,7 @@ cp .env.example .env.local
 
 Edit both files with your Supabase connection values:
 - `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_PORT` → `.env` (for the Python scraper)
-- `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` → `.env.local` (for the Next.js frontend)
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_SITE_URL` → `.env.local` (for the Next.js frontend and canonical SEO URLs)
 
 Get these from your Supabase project: **Settings → API**.
 
@@ -283,7 +283,7 @@ Open [http://localhost:3000](http://localhost:3000)
 python scraper.py --run
 ```
 
-This pulls source-backed scores and episode metadata for the configured detail mappings. It refuses to run without the validated DB contract.
+This pulls source-backed scores and metadata for the configured detail mappings. Routine mode intentionally skips the slower episode endpoint crawl so score freshness is not blocked. Use `python scraper.py --run --episodes` for the bounded episode pass.
 
 ---
 
@@ -298,10 +298,12 @@ For catalog discovery:
 For detail synchronization:
   1. Fetch source values from AniList, Jikan/MAL, and Kitsu where available
   2. Store only values returned by those sources in score_snapshots
-  3. Store episode metadata only when the source returns the episode
+  3. Store episode metadata only when the source returns the episode and the episode pass is enabled
   4. Preserve missing values as unavailable
   5. Never harvest user-level profiles or infer voter intent
 ```
+
+The scheduled score workflow shares one AniList catalog response between discovery and score insertion. Episode synchronization is isolated in `.github/workflows/episode-sync.yml`, scheduled weekly and available through manual dispatch.
 
 **Rate limits respected:**
 - AniList: ~90 req/min (unauthenticated)

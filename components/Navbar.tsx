@@ -32,7 +32,9 @@ export default function Navbar() {
 
         {/* Desktop Navigation Links */}
         <nav className="hidden md:flex items-center gap-8 text-xs font-black uppercase tracking-wider text-text-secondary">
-          <Link href="/" className="hover:text-text-primary transition-colors">Explore</Link>
+          <Link href="/" className="hover:text-text-primary transition-colors">Rating explorer</Link>
+          <Link href="/why" className="hover:text-text-primary transition-colors">Why this exists</Link>
+          <Link href="/watchlist" className="hover:text-text-primary transition-colors">My decisions</Link>
           <Link href="/battles" className="hover:text-text-primary transition-colors">Comparisons</Link>
           <Link href="/methodology" className="hover:text-text-primary transition-colors">Methodology</Link>
           <Link href="/submit" className="hover:text-text-primary transition-colors">Corrections</Link>
@@ -43,6 +45,8 @@ export default function Navbar() {
           onClick={() => setIsOpen(!isOpen)}
           className="md:hidden min-h-11 min-w-11 p-2 text-text-secondary hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-cyan"
           aria-label="Toggle menu"
+          aria-expanded={isOpen}
+          aria-controls="mobile-navigation"
         >
           {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
@@ -59,14 +63,16 @@ export default function Navbar() {
             variants={menuVariants}
             className="md:hidden border-t border-border bg-surface/95 overflow-hidden"
           >
-            <nav className="flex flex-col px-4 py-4 space-y-4 text-sm font-bold uppercase tracking-wider text-text-secondary">
+            <nav id="mobile-navigation" className="flex flex-col px-4 py-4 space-y-4 text-sm font-bold uppercase tracking-wider text-text-secondary">
               <Link 
                 href="/" 
                 onClick={() => setIsOpen(false)}
                 className="py-2 hover:text-text-primary transition-colors border-b border-border/40"
               >
-                Explore
+                Rating explorer
               </Link>
+              <Link href="/why" onClick={() => setIsOpen(false)} className="py-2 hover:text-text-primary transition-colors border-b border-border/40">Why this exists</Link>
+              <Link href="/watchlist" onClick={() => setIsOpen(false)} className="py-2 hover:text-text-primary transition-colors border-b border-border/40">My decisions</Link>
               <Link 
                 href="/battles" 
                 onClick={() => setIsOpen(false)}

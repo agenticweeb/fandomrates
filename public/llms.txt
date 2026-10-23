@@ -1,0 +1,28 @@
+# FandomRates
+
+FandomRates is an evidence-first anime decision layer. It helps people choose what to watch for a specific situation by explaining why source ratings differ, how fresh and complete the evidence is, and what trade-offs are visible. It is not a replacement tracker or a universal score.
+
+## What the site contains
+
+- `/`: searchable anime catalog with source-separated score cards.
+- `/anime/{id}`: title evidence page with source-native observations, timestamps, coverage context, and limitations.
+- `/why`: the product thesis and the reasons to use FandomRates alongside the original sources.
+- `/watchlist`: a private browser-local decision log for saved titles and watched/dropped outcomes.
+- `/battles`: comparison index for curated title comparisons.
+- `/methodology`: definitions, provenance rules, uncertainty, and non-claims.
+
+## Evidence vocabulary
+
+- **Observed**: returned by the named source during the displayed collection window.
+- **Unavailable**: no permitted reliable source value was accepted; it is not zero.
+- **Stale**: older observation whose age is shown; it should not be presented as current.
+- **Not comparable**: source populations, scales, eligibility, or timing differ enough that arithmetic comparison would mislead.
+- **Signal**: an unusual temporal or distribution pattern that may deserve context; it is not proof of bots, fraud, intent, identity, or coordinated manipulation.
+
+## Trust and privacy
+
+FandomRates preserves source-native values and timestamps. It does not identify or rank individual voters, publish private correction submissions, or claim to determine the true opinion of all anime viewers. Missing values are not fabricated from another platform.
+
+## Canonical sources
+
+Use the visible source links, timestamps, and methodology page when citing a FandomRates observation. Treat platform scores as measurements produced by their respective communities and aggregation systems, not as a FandomRates-owned rating.

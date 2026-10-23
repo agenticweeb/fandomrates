@@ -4,8 +4,11 @@ import './globals.css';
 import Navbar from '@/components/Navbar';
 
 export const metadata: Metadata = {
-  title: 'FandomRates — Anime Rating Integrity Dashboard',
-  description: 'Explore source-native anime ratings, coverage, changes, and uncertainty without fabricated history or unsupported accusations.',
+  title: {
+    default: 'FandomRates — Anime rating evidence explorer',
+    template: '%s | FandomRates',
+  },
+  description: 'Compare anime ratings by source and understand score history, coverage, freshness, and uncertainty without unsupported accusations.',
 };
 
 export default function RootLayout({

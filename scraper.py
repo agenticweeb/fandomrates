@@ -330,7 +330,7 @@ def discover_anilist_catalog(limit=50, page=1):
     return data.get("Page", {}).get("media", [])
 
 
-def sync_anilist_catalog(limit=50, page=1):
+def sync_anilist_catalog(limit=50, page=1, media_list=None):
     """Upsert discovered titles; detailed season sync remains source-scoped."""
     update_query = """
     UPDATE anime SET title_english = %s, title_romaji = %s, cover_image_url = %s,
@@ -342,7 +342,7 @@ def sync_anilist_catalog(limit=50, page=1):
       banner_image_url, synopsis, episodes, status, season, season_year)
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
     """
-    media_list = discover_anilist_catalog(limit, page)
+    media_list = media_list if media_list is not None else discover_anilist_catalog(limit, page)
     for media in media_list:
         title = media.get("title", {})
         cover = media.get("coverImage", {})
@@ -358,11 +358,11 @@ def sync_anilist_catalog(limit=50, page=1):
     return len(media_list)
 
 
-def sync_catalog_score_snapshots(limit=50, page=1):
+def sync_catalog_score_snapshots(limit=50, page=1, media_list=None):
     """Store current AniList observations for discovered titles without inference."""
     observed_at = datetime.now(timezone.utc)
     insert_snapshot = """INSERT INTO score_snapshots (anime_id, platform, score, popularity, scraped_at) VALUES (%s, %s, %s, %s, %s);"""
-    media_list = discover_anilist_catalog(limit, page)
+    media_list = media_list if media_list is not None else discover_anilist_catalog(limit, page)
     inserted = 0
     for media in media_list:
         average_score = media.get("averageScore")
@@ -432,7 +432,7 @@ def harvest_live_reviews_and_profiles(*_args, **_kwargs):
     print("       [Privacy Guard] User-level review/profile harvesting is disabled.")
 
 
-def run_sync(refresh_only=False):
+def run_sync(refresh_only=False, sync_episodes=False):
     validate_config()
     ensure_database_schema_health()
 
@@ -441,6 +441,8 @@ def run_sync(refresh_only=False):
     if refresh_only:
         cutoff_dt = datetime.now(timezone.utc) - timedelta(days=3)
         print("   [Sync] Refresh mode enabled: focusing on the last 3 days of activity.")
+    if not sync_episodes:
+        print("   [Sync] Fast mode enabled: skipping episode endpoint crawling. Use --episodes for a bounded detail pass.")
 
     upsert_anime_query = """
     INSERT INTO anime (id, anilist_id, mal_id, title_english, title_romaji, cover_image_url, banner_image_url, synopsis, episodes, status, season, season_year)
@@ -469,6 +471,7 @@ def run_sync(refresh_only=False):
     VALUES (%s, %s, %s, %s, %s);
     """
 
+    sync_failures = 0
     for franchise in MAPPINGS:
         anime_id = franchise["anime_id"]
         default_eng = franchise["title_english"]
@@ -542,7 +545,11 @@ def run_sync(refresh_only=False):
             ))
             print(f"   -> Parent franchise metrics upsert complete.")
         except Exception as e:
+            sync_failures += 1
             print(f"   -> [Error] Failed to upsert parent anime ID {anime_id}: {e}", file=sys.stderr)
+            continue
+
+        if not sync_episodes:
             continue
 
         for s in franchise["seasons"]:
@@ -650,14 +657,18 @@ def run_sync(refresh_only=False):
                     
                     print("       -> Review/profile harvesting disabled pending source and privacy approval.")
             except Exception as db_err:
+                 sync_failures += 1
                  print(f"       -> [Error] Database operation failed for Season {season_number}: {db_err}", file=sys.stderr)
 
+    if sync_failures:
+        raise RuntimeError(f"Synchronization completed with {sync_failures} database failure(s); refusing a false-success exit.")
     print("\nSynchronization task finished.")
 
 def parse_args():
     parser = argparse.ArgumentParser(description='FandomRates scraper')
     parser.add_argument('--run', action='store_true', help='Run the scraper sync')
     parser.add_argument('--refresh', action='store_true', help='Run a short refresh pass for recent activity only')
+    parser.add_argument('--episodes', action='store_true', help='Include the slower Jikan/AniList episode metadata pass')
     parser.add_argument('--discover', action='store_true', help='Discover and upsert canonical anime from AniList')
     parser.add_argument('--catalog-scores', action='store_true', help='Store current AniList scores for discovered catalog titles')
     parser.add_argument('--limit', type=int, default=50, help='Maximum catalog titles for --discover (1-50)')
@@ -672,14 +683,15 @@ if __name__ == "__main__":
         validate_config()
         if args.discover or args.catalog_scores:
             ensure_database_schema_health()
+            catalog_media = discover_anilist_catalog(args.limit, args.page) if args.discover and args.catalog_scores else None
             if args.discover:
-                sync_anilist_catalog(args.limit, args.page)
+                sync_anilist_catalog(args.limit, args.page, catalog_media)
             if args.catalog_scores:
-                sync_catalog_score_snapshots(args.limit, args.page)
+                sync_catalog_score_snapshots(args.limit, args.page, catalog_media)
         elif args.refresh:
-            run_sync(refresh_only=True)
+            run_sync(refresh_only=True, sync_episodes=args.episodes)
         else:
-            run_sync()
+            run_sync(sync_episodes=args.episodes)
     except (ValueError, RuntimeError) as exc:
         print(f"[Configuration/Preflight Error] {exc}", file=sys.stderr)
         raise SystemExit(2)
