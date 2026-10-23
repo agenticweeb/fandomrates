@@ -311,7 +311,7 @@ def fetch_anilist_user_stats(username):
     return None
 
 
-def discover_anilist_catalog(limit=50):
+def discover_anilist_catalog(limit=50, page=1):
     """Discover canonical anime records without hard-coded franchise mappings."""
     query = """
     query ($page: Int, $perPage: Int) {
@@ -326,11 +326,11 @@ def discover_anilist_catalog(limit=50):
     }
     """
     page_size = min(max(int(limit), 1), 50)
-    data = safe_anilist_post(query, {"page": 1, "perPage": page_size}) or {}
+    data = safe_anilist_post(query, {"page": max(1, int(page)), "perPage": page_size}) or {}
     return data.get("Page", {}).get("media", [])
 
 
-def sync_anilist_catalog(limit=50):
+def sync_anilist_catalog(limit=50, page=1):
     """Upsert discovered titles; detailed season sync remains source-scoped."""
     update_query = """
     UPDATE anime SET title_english = %s, title_romaji = %s, cover_image_url = %s,
@@ -342,7 +342,7 @@ def sync_anilist_catalog(limit=50):
       banner_image_url, synopsis, episodes, status, season, season_year)
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
     """
-    media_list = discover_anilist_catalog(limit)
+    media_list = discover_anilist_catalog(limit, page)
     for media in media_list:
         title = media.get("title", {})
         cover = media.get("coverImage", {})
@@ -354,8 +354,32 @@ def sync_anilist_catalog(limit=50):
         updated = execute_query(update_query, values, fetch=True)
         if not updated:
             execute_query(insert_query, (media.get("id"),) + values[:-1])
-    print(f"[Catalog] Accepted {len(media_list)} canonical AniList anime records.")
+    print(f"[Catalog] Accepted {len(media_list)} canonical AniList anime records from page {page}.")
     return len(media_list)
+
+
+def sync_catalog_score_snapshots(limit=50, page=1):
+    """Store current AniList observations for discovered titles without inference."""
+    observed_at = datetime.now(timezone.utc)
+    insert_snapshot = """INSERT INTO score_snapshots (anime_id, platform, score, popularity, scraped_at) VALUES (%s, %s, %s, %s, %s);"""
+    media_list = discover_anilist_catalog(limit, page)
+    inserted = 0
+    for media in media_list:
+        average_score = media.get("averageScore")
+        if average_score is None:
+            continue
+        row = execute_query("SELECT id FROM anime WHERE anilist_id = %s;", (media.get("id"),), fetch_one=True)
+        if not row:
+            continue
+        recent = execute_query(
+            "SELECT id FROM score_snapshots WHERE anime_id = %s AND platform = 'anilist' AND scraped_at >= %s;",
+            (row[0], observed_at - timedelta(hours=6)), fetch_one=True,
+        )
+        if not recent:
+            execute_query(insert_snapshot, (row[0], "anilist", float(average_score) / 10.0, media.get("popularity"), observed_at.isoformat()))
+            inserted += 1
+    print(f"[Catalog] Stored {inserted} source-native AniList snapshots from page {page}.")
+    return inserted
 
 # ==========================================
 # 5. CORE SYSTEM SYNCHRONIZER
@@ -635,18 +659,23 @@ def parse_args():
     parser.add_argument('--run', action='store_true', help='Run the scraper sync')
     parser.add_argument('--refresh', action='store_true', help='Run a short refresh pass for recent activity only')
     parser.add_argument('--discover', action='store_true', help='Discover and upsert canonical anime from AniList')
+    parser.add_argument('--catalog-scores', action='store_true', help='Store current AniList scores for discovered catalog titles')
     parser.add_argument('--limit', type=int, default=50, help='Maximum catalog titles for --discover (1-50)')
+    parser.add_argument('--page', type=int, default=1, help='AniList popularity page for catalog operations')
     return parser.parse_args()
 
 if __name__ == "__main__":
     args = parse_args()
-    if not (args.run or args.refresh or args.discover):
-        raise SystemExit("Refusing implicit sync. Use --run, --refresh, or --discover explicitly.")
+    if not (args.run or args.refresh or args.discover or args.catalog_scores):
+        raise SystemExit("Refusing implicit sync. Use --run, --refresh, --discover, or --catalog-scores explicitly.")
     try:
         validate_config()
-        if args.discover:
+        if args.discover or args.catalog_scores:
             ensure_database_schema_health()
-            sync_anilist_catalog(args.limit)
+            if args.discover:
+                sync_anilist_catalog(args.limit, args.page)
+            if args.catalog_scores:
+                sync_catalog_score_snapshots(args.limit, args.page)
         elif args.refresh:
             run_sync(refresh_only=True)
         else:

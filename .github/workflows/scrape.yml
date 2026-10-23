@@ -67,4 +67,5 @@ jobs:
           DB_SSLMODE: require
         run: |
           python scraper.py --discover --limit 50
+          python scraper.py --catalog-scores --limit 50
           python scraper.py --run
