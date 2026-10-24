@@ -55,7 +55,7 @@ async function getDashboardData(rawQuery?: string) {
   }
 
   let battles: Battle[] = [];
-  const battleResult = await supabase.from('battles').select('id, slug, is_active, created_at, anime_a:anime_a_id(*), anime_b:anime_b_id(*)').eq('is_active', true) as { data: Battle[] | null; error: { message: string } | null };
+  const battleResult = await supabase.from('battles').select('id, anime_a_id, anime_b_id, slug, is_active, created_at, anime_a:anime_a_id(*), anime_b:anime_b_id(*)').eq('is_active', true) as { data: Battle[] | null; error: { message: string } | null };
   if (battleResult.error) {
     console.error('FandomRates comparison query failed', battleResult.error);
     warnings.push('Comparisons are temporarily unavailable.');
