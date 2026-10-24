@@ -5,6 +5,7 @@ import re
 import time
 import json
 import argparse
+import unicodedata
 from datetime import datetime, timezone, timedelta
 import requests
 from scraper_config import load_local_dotenv, validate_config
@@ -33,6 +34,12 @@ def parse_jikan_date(date_str):
     if not date_str:
         return None
     return date_str[:10]
+
+def normalize_title_for_search(value):
+    """Normalize search keys while preserving the original display title."""
+    folded = unicodedata.normalize("NFKC", value or "").casefold()
+    folded = "".join(char for char in unicodedata.normalize("NFKD", folded) if not unicodedata.combining(char))
+    return re.sub(r"[^\w]+", " ", folded, flags=re.UNICODE).strip()
 
 # ==========================================
 # 2. DATABASE CONNECTION WITH PERSISTENT SOCKET
@@ -317,8 +324,9 @@ def discover_anilist_catalog(limit=50, page=1):
     query ($page: Int, $perPage: Int) {
       Page(page: $page, perPage: $perPage) {
         media(type: ANIME, sort: POPULARITY_DESC, isAdult: false) {
-          id averageScore popularity episodes status season seasonYear
-          title { english romaji }
+          id idMal averageScore popularity episodes status season seasonYear updatedAt siteUrl
+          title { english romaji native }
+          synonyms
           coverImage { extraLarge large }
           bannerImage description
         }
@@ -340,7 +348,8 @@ def sync_anilist_catalog(limit=50, page=1, media_list=None):
     insert_query = """
     INSERT INTO anime (anilist_id, title_english, title_romaji, cover_image_url,
       banner_image_url, synopsis, episodes, status, season, season_year)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+    RETURNING id;
     """
     media_list = media_list if media_list is not None else discover_anilist_catalog(limit, page)
     for media in media_list:
@@ -353,7 +362,38 @@ def sync_anilist_catalog(limit=50, page=1, media_list=None):
         )
         updated = execute_query(update_query, values, fetch=True)
         if not updated:
-            execute_query(insert_query, (media.get("id"),) + values[:-1])
+            inserted = execute_query(insert_query, (media.get("id"),) + values[:-1], fetch=True)
+            anime_id = inserted[0][0] if inserted else None
+        else:
+            anime_id = updated[0][0]
+        if not anime_id:
+            continue
+        try:
+            source_id = str(media.get("id"))
+            display_title = title.get("english") or title.get("romaji") or title.get("native")
+            execute_query(
+                """INSERT INTO source_identities (anime_id, source, source_id, canonical_title, confidence, review_status, provenance_url)
+                   VALUES (%s, 'anilist', %s, %s, 1.0000, 'accepted', %s)
+                   ON CONFLICT (source, source_id) DO UPDATE SET anime_id = EXCLUDED.anime_id,
+                     canonical_title = EXCLUDED.canonical_title, last_seen_at = NOW(), provenance_url = EXCLUDED.provenance_url;""",
+                (anime_id, source_id, display_title, media.get("siteUrl")),
+            )
+            aliases = [(title.get("english"), "english"), (title.get("romaji"), "romaji"), (title.get("native"), "native")]
+            aliases.extend((alias, "source_synonym") for alias in media.get("synonyms", []) if alias)
+            for alias, alias_type in aliases:
+                normalized_alias = normalize_title_for_search(alias)
+                if not normalized_alias:
+                    continue
+                execute_query(
+                    """INSERT INTO anime_title_aliases (anime_id, alias, normalized_alias, alias_type, source, source_id, provenance_url)
+                       VALUES (%s, %s, %s, %s, 'anilist', %s, %s)
+                       ON CONFLICT (anime_id, source, normalized_alias) DO UPDATE SET alias = EXCLUDED.alias,
+                         alias_type = EXCLUDED.alias_type, observed_at = NOW(), provenance_url = EXCLUDED.provenance_url;""",
+                    (anime_id, alias, normalized_alias, alias_type, source_id, media.get("siteUrl")),
+                )
+        except Exception as identity_error:
+            # Keep catalog ingestion backward compatible until the migration is applied.
+            print(f"       [Catalog Warning] Identity/alias tables unavailable; catalog row retained: {identity_error}", file=sys.stderr)
     print(f"[Catalog] Accepted {len(media_list)} canonical AniList anime records from page {page}.")
     return len(media_list)
 
