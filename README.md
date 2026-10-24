@@ -84,8 +84,10 @@ The project uses 7 PostgreSQL tables with Row Level Security (RLS) for public re
 | `score_snapshots` | Weekly score data per platform per anime |
 | `episode_scores` | Per-episode scores and air dates |
 | `anomaly_events` | Observed score changes with source and timestamps |
-| `suspicious_profiles` | Legacy/private-only data; not displayed by the public product |
-| `community_submissions` | Legacy schema; correction intake is validated server-side |
+| `anime_title_aliases` | Provenance-backed native, alternate, and synonym titles |
+| `source_identities` | Provider-scoped IDs and canonical identity confidence |
+| `suspicious_profiles` | Legacy/private-only data; anonymous reads are revoked |
+| `community_submissions` | Legacy/private intake data; anonymous reads are revoked |
 | `battles` | Dynamic battle pairs (anime_a vs anime_b) |
 
 ### Key Design Decisions
@@ -94,9 +96,20 @@ The project uses 7 PostgreSQL tables with Row Level Security (RLS) for public re
 - **RLS:** Public reads should expose only approved aggregate/source-native tables. Correction intake is server-side and must not expose provider credentials.
 - **Source provenance:** Each accepted observation needs a source, timestamp, native scale, and coverage context; missing data remains unavailable.
 
-### Full SQL
+### Database migrations
 
-Run this in your Supabase SQL Editor to initialize the database:
+The tracked Supabase migration directory is now the schema source of truth. Apply migrations with the Supabase CLI, then verify the resulting policies and indexes. Do not use the historical SQL block below to initialize a new production database; it is retained only as an early-project reference and contains legacy tables/policies that are intentionally no longer public.
+
+```bash
+supabase link --project-ref YOUR_PROJECT_REF
+supabase db push
+```
+
+The current identity/search migration adds normalized title keys, AniList/source identities, controlled aliases, trigram indexes, and the read-only `search_anime_titles` RPC. It also revokes anonymous reads from legacy profile/submission tables. The scraper can discover catalog rows before the migration exists, but alias persistence begins only after this migration is applied.
+
+### Historical SQL reference
+
+The following block documents the original bootstrap schema and is not a replacement for migrations:
 
 ```sql
 -- Base tables
