@@ -1,0 +1,68 @@
+name: FandomRates Index Requests
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      request_limit:
+        description: 'Maximum queued requests to process'
+        required: false
+        default: '5'
+
+jobs:
+  process-index-requests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    concurrency:
+      group: fandomrates-index-requests-production
+      cancel-in-progress: false
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
+        with:
+          python-version: '3.11'
+
+      - name: Validate production database secrets
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in DB_HOST DB_USER DB_PASSWORD DB_NAME DB_PORT; do
+            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "Missing required production secret(s): ${missing[*]}" >&2
+            exit 2
+          fi
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Process queued index requests
+        env:
+          FANDOMRATES_ENV: production
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_SSLMODE: require
+          REQUEST_LIMIT: ${{ github.event.inputs.request_limit || '5' }}
+        run: |
+          limit="$REQUEST_LIMIT"
+          case "$limit" in ''|*[!0-9]*) echo 'request_limit must be numeric' >&2; exit 2;; esac
+          python scraper.py --process-index-requests --request-limit "$limit"

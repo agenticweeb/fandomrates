@@ -107,6 +107,8 @@ supabase db push
 
 The current identity/search migration adds normalized title keys, AniList/source identities, controlled aliases, trigram indexes, and the read-only `search_anime_titles` RPC. It also revokes anonymous reads from legacy profile/submission tables. The scraper can discover catalog rows before the migration exists, but alias persistence begins only after this migration is applied.
 
+The indexing-request migration adds the durable `index_requests` queue and the validated `enqueue_index_request` RPC. The homepage's **Request index** action now carries the AniList provider ID into that queue; it is not a Discord-only form anymore. `.github/workflows/index-requests.yml` claims up to five requests every 15 minutes, resolves the AniList record, stores its canonical identity/aliases and current AniList observation, and then attempts explicit MAL/Jikan and Kitsu enrichment when AniList supplies a MAL mapping. Queue status is durable in Postgres, so a delayed GitHub schedule does not lose the request.
+
 ### Historical SQL reference
 
 The following block documents the original bootstrap schema and is not a replacement for migrations:
