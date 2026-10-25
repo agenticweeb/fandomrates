@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabase';
 
 export const runtime = 'edge';
 
@@ -30,11 +31,15 @@ export async function GET(request: Request) {
     if (!response.ok) return NextResponse.json({ results: [], unavailable: true }, { status: 200, headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' } });
     const payload = await response.json() as { data?: { Page?: { media?: Array<{ id: number; averageScore: number | null; popularity: number | null; title: { english: string | null; romaji: string | null; native: string | null }; coverImage: { medium: string | null } | null }> } }; errors?: unknown[] };
     if (payload.errors || !payload.data?.Page?.media) return NextResponse.json({ results: [], unavailable: true });
+    const media = payload.data.Page.media;
+    const { data: indexedRows } = await supabase.from('anime').select('id, anilist_id').in('anilist_id', media.map((item) => item.id));
+    const indexedBySourceId = new Map((indexedRows || []).map((row) => [row.anilist_id, row.id]));
 
     return NextResponse.json({
-      results: payload.data.Page.media.map((media) => ({
+      results: media.map((media) => ({
         source: 'AniList',
         sourceId: media.id,
+        indexedAnimeId: indexedBySourceId.get(media.id) || null,
         title: media.title.english || media.title.romaji || media.title.native || 'Untitled anime',
         alternateTitle: media.title.romaji || media.title.native,
         score: media.averageScore === null ? null : media.averageScore / 10,

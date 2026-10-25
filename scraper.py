@@ -6,6 +6,7 @@ import time
 import json
 import argparse
 import unicodedata
+import uuid
 from datetime import datetime, timezone, timedelta
 import requests
 from scraper_config import load_local_dotenv, validate_config
@@ -176,9 +177,12 @@ def fetch_anilist_media(anilist_id):
     query ($id: Int) {
         Media(id: $id, type: ANIME) {
             id
+            idMal
             averageScore
             popularity
-            title { english romaji }
+            title { english romaji native }
+            synonyms
+            siteUrl
             coverImage { extraLarge large }
             bannerImage
             description
@@ -341,14 +345,14 @@ def discover_anilist_catalog(limit=50, page=1):
 def sync_anilist_catalog(limit=50, page=1, media_list=None):
     """Upsert discovered titles; detailed season sync remains source-scoped."""
     update_query = """
-    UPDATE anime SET title_english = %s, title_romaji = %s, cover_image_url = %s,
+    UPDATE anime SET mal_id = %s, title_english = %s, title_romaji = %s, cover_image_url = %s,
       banner_image_url = %s, synopsis = %s, episodes = %s, status = %s,
       season = %s, season_year = %s WHERE anilist_id = %s RETURNING id;
     """
     insert_query = """
-    INSERT INTO anime (anilist_id, title_english, title_romaji, cover_image_url,
+    INSERT INTO anime (anilist_id, mal_id, title_english, title_romaji, cover_image_url,
       banner_image_url, synopsis, episodes, status, season, season_year)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     RETURNING id;
     """
     media_list = media_list if media_list is not None else discover_anilist_catalog(limit, page)
@@ -360,9 +364,9 @@ def sync_anilist_catalog(limit=50, page=1, media_list=None):
             media.get("description"), media.get("episodes"), media.get("status"),
             media.get("season"), media.get("seasonYear"), media.get("id"),
         )
-        updated = execute_query(update_query, values, fetch=True)
+        updated = execute_query(update_query, (media.get("idMal"),) + values, fetch=True)
         if not updated:
-            inserted = execute_query(insert_query, (media.get("id"),) + values[:-1], fetch=True)
+            inserted = execute_query(insert_query, (media.get("id"), media.get("idMal")) + values[:-1], fetch=True)
             anime_id = inserted[0][0] if inserted else None
         else:
             anime_id = updated[0][0]
@@ -420,6 +424,84 @@ def sync_catalog_score_snapshots(limit=50, page=1, media_list=None):
             inserted += 1
     print(f"[Catalog] Stored {inserted} source-native AniList snapshots from page {page}.")
     return inserted
+
+def process_index_requests(limit=5):
+    """Claim a small queue batch and publish only validated AniList records."""
+    processed = 0
+    for _ in range(max(1, min(int(limit), 20))):
+        lease_token = str(uuid.uuid4())
+        claimed = execute_query(
+            """WITH next_request AS (
+                 SELECT id FROM index_requests
+                 WHERE status IN ('pending', 'failed') AND next_attempt_at <= NOW()
+                   AND (lease_until IS NULL OR lease_until < NOW())
+                 ORDER BY requested_at ASC
+                 FOR UPDATE SKIP LOCKED LIMIT 1
+               )
+               UPDATE index_requests AS request
+               SET status = 'claimed', attempts = request.attempts + 1,
+                   lease_until = NOW() + INTERVAL '10 minutes', lease_token = %s, updated_at = NOW()
+               FROM next_request
+               WHERE request.id = next_request.id
+               RETURNING request.id, request.provider_id, request.attempts;""",
+            (lease_token,), fetch_one=True,
+        )
+        if not claimed:
+            break
+        request_id, provider_id, attempts = claimed
+        try:
+            media = fetch_anilist_media(int(provider_id))
+            if not media or str(media.get("id")) != str(provider_id):
+                raise RuntimeError("AniList returned no valid anime record for the requested ID")
+            sync_anilist_catalog(media_list=[media])
+            anime_row = execute_query("SELECT id FROM anime WHERE anilist_id = %s;", (int(provider_id),), fetch_one=True)
+            if not anime_row:
+                raise RuntimeError("Catalog upsert completed without an internal anime ID")
+            sync_catalog_score_snapshots(media_list=[media])
+            sync_related_source_snapshots(anime_row[0], media)
+            execute_query(
+                """UPDATE index_requests SET status = 'accepted', resolved_anime_id = %s,
+                   lease_until = NULL, lease_token = NULL, last_error = NULL, updated_at = NOW()
+                   WHERE id = %s AND lease_token = %s;""",
+                (anime_row[0], request_id, lease_token),
+            )
+            processed += 1
+            print(f"[Index Queue] Accepted AniList {provider_id} as anime/{anime_row[0]}.")
+        except Exception as error:
+            next_status = 'failed' if int(attempts) >= 3 else 'pending'
+            execute_query(
+                """UPDATE index_requests SET status = %s, next_attempt_at = NOW() + (%s || ' minutes')::interval,
+                   lease_until = NULL, lease_token = NULL, last_error = %s, updated_at = NOW()
+                   WHERE id = %s AND lease_token = %s;""",
+                (next_status, min(60, 5 * int(attempts)), str(error)[:500], request_id, lease_token),
+            )
+            print(f"[Index Queue] Request {request_id} failed ({next_status}): {error}", file=sys.stderr)
+    return processed
+
+def sync_related_source_snapshots(anime_id, media):
+    """Fetch only explicitly mapped related sources; never infer IDs from title text."""
+    mal_id = media.get("idMal")
+    if not mal_id:
+        return 0
+    observed_at = datetime.now(timezone.utc)
+    insert_snapshot = """INSERT INTO score_snapshots (anime_id, platform, score, popularity, scraped_at)
+                         VALUES (%s, %s, %s, %s, %s);"""
+    written = 0
+    mal_data = fetch_jikan_fallback_images(mal_id)
+    if mal_data.get("score") is not None:
+        recent = execute_query("SELECT id FROM score_snapshots WHERE anime_id = %s AND platform = 'mal' AND scraped_at >= %s;", (anime_id, observed_at - timedelta(hours=6)), fetch_one=True)
+        if not recent:
+            execute_query(insert_snapshot, (anime_id, "mal", float(mal_data["score"]), mal_data.get("members"), observed_at.isoformat()))
+            written += 1
+    kitsu_id, kitsu_attrs = fetch_kitsu_data_from_mal(mal_id)
+    if kitsu_id:
+        execute_query("UPDATE anime SET kitsu_id = %s WHERE id = %s;", (int(kitsu_id), anime_id))
+    if kitsu_attrs and kitsu_attrs.get("averageRating") is not None:
+        recent = execute_query("SELECT id FROM score_snapshots WHERE anime_id = %s AND platform = 'kitsu' AND scraped_at >= %s;", (anime_id, observed_at - timedelta(hours=6)), fetch_one=True)
+        if not recent:
+            execute_query(insert_snapshot, (anime_id, "kitsu", round(float(kitsu_attrs["averageRating"]) / 10.0, 2), kitsu_attrs.get("userCount"), observed_at.isoformat()))
+            written += 1
+    return written
 
 # ==========================================
 # 5. CORE SYSTEM SYNCHRONIZER
@@ -711,17 +793,21 @@ def parse_args():
     parser.add_argument('--episodes', action='store_true', help='Include the slower Jikan/AniList episode metadata pass')
     parser.add_argument('--discover', action='store_true', help='Discover and upsert canonical anime from AniList')
     parser.add_argument('--catalog-scores', action='store_true', help='Store current AniList scores for discovered catalog titles')
+    parser.add_argument('--process-index-requests', action='store_true', help='Process a bounded batch of queued title-index requests')
+    parser.add_argument('--request-limit', type=int, default=5, help='Maximum queued index requests to process (1-20)')
     parser.add_argument('--limit', type=int, default=50, help='Maximum catalog titles for --discover (1-50)')
     parser.add_argument('--page', type=int, default=1, help='AniList popularity page for catalog operations')
     return parser.parse_args()
 
 if __name__ == "__main__":
     args = parse_args()
-    if not (args.run or args.refresh or args.discover or args.catalog_scores):
-        raise SystemExit("Refusing implicit sync. Use --run, --refresh, --discover, or --catalog-scores explicitly.")
+    if not (args.run or args.refresh or args.discover or args.catalog_scores or args.process_index_requests):
+        raise SystemExit("Refusing implicit sync. Use --run, --refresh, --discover, --catalog-scores, or --process-index-requests explicitly.")
     try:
         validate_config()
-        if args.discover or args.catalog_scores:
+        if args.process_index_requests:
+            process_index_requests(args.request_limit)
+        elif args.discover or args.catalog_scores:
             ensure_database_schema_health()
             catalog_media = discover_anilist_catalog(args.limit, args.page) if args.discover and args.catalog_scores else None
             if args.discover:
